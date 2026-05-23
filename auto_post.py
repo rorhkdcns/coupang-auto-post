@@ -1,12 +1,22 @@
 import os
+import sys
+import subprocess
+
+# 📦 [무적 패치] 실행되자마자 필요한 도구들을 강제로 설치합니다.
+try:
+    import requests
+except ModuleNotFoundError:
+    print("📦 requests 라이브러리가 없어 자동 설치를 시작합니다...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "requests"])
+    import requests
+
 import random
 import hmac
 import hashlib
 import time
-import requests
 import json
 
-# ⚙️ 고유 설정 정보 (형 정보 그대로 유지)
+# ⚙️ 고유 설정 정보 (형의 진짜 정보로 채워 넣으세요!)
 BLOG_ID = "형의_쿠팡_블로그_ID"  
 GOOGLE_ADSENSE_CLIENT = "형의_애드센스_pub_코드"
 GOOGLE_ADSENSE_SLOT = "형의_애드센스_slot_코드"
@@ -18,7 +28,6 @@ def generate_coupang_headers(method, path, query_string, access_key, secret_key)
     if not access_key or not secret_key:
         raise ValueError("❌ 깃허브 시크릿에 쿠팡 키가 누락되었거나 비어있습니다!")
         
-    # 쿠팡 규격 타임스탬프 생성 (GMT 기준)
     datetime_gmt = time.strftime('%y%m%dT%H%M%SZ', time.gmtime())
     message = datetime_gmt + method + path + query_string
 
@@ -56,7 +65,6 @@ def main():
         if res.status_code != 200:
             print("❌ [경고] 쿠팡 API 호출 실패!")
             print(f"ℹ️ 쿠팡이 보낸 에러 메시지: {res.text}")
-            # 이번엔 정상 종료 안 시키고 강제로 에러 터뜨려서 빨간불 띄우기
             raise Exception(f"쿠팡 인증 실패 상태코드: {res.status_code}")
             
         data = res.json()
@@ -67,7 +75,6 @@ def main():
             return
 
         print(f"✅ 성공! 상품 {len(products)}개를 무사히 소싱했습니다.")
-        # (여기에 원래 블로그 글 쓰는 로직이 이어짐 - 테스트를 위해 간소화)
         
     except Exception as e:
         print(f"💥 치명적 오류 발생: {str(e)}")
