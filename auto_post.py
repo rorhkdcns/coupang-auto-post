@@ -52,14 +52,13 @@ def main():
     keyword = random.choice(SUGGESTED_KEYWORDS)
     print(f"🎯 [아이템 소싱] 이번 타겟 키워드: {keyword}")
 
-    domain = "https://api-gateway.coupang.com"
+    # ⚠️ [핵심 패치] 파트너스 전용 최신 정식 도메인으로 교체!
+    domain = "https://partners.api.coupang.com"
     path = "/v1/partners/products/search"
     
-    # ⚠️ [핵심 패치] 쿠팡이 요구하는 정렬(SIM), 제한(10개) 파라미터를 규격에 맞게 딕셔너리로 결합
     params = {
         "keyword": keyword,
-        "limit": 10,
-        "sorter": "SIM"  # 정확도순 정렬 필터 추가
+        "limit": 10
     }
     query_string = urlencode(params)
     url = f"{domain}{path}?{query_string}"
