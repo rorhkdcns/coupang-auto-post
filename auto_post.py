@@ -27,9 +27,9 @@ import datetime
 # =====================================================================
 # ⚙️ [고유 설정 정보] 형의 진짜 정보들로 꼭 채워 넣어주세요!
 # =====================================================================
-BLOG_ID = "형의_진짜_블로그_ID_입력"  
-GOOGLE_ADSENSE_CLIENT = "형의_애드센스_pub_코드_입력"
-GOOGLE_ADSENSE_SLOT = "형의_애드센스_slot_코드_입력"
+BLOG_ID = "8715372631292128719"  
+GOOGLE_ADSENSE_CLIENT = "ca-pub-429247837891715"
+GOOGLE_ADSENSE_SLOT = "7988651325"
 
 SUGGESTED_KEYWORDS = [
     "접이식 대용량 빨래바구니", "틈새 수납 슬라이딩 카트", "무선 버티컬 마우스", 
@@ -41,20 +41,13 @@ def get_coupang_products(keyword, access_key, secret_key):
     domain = "https://api-gateway.coupang.com"
     path = "/v1/partners/products/search"
     
-    # ⚠️ [404 귀신 박멸 핵심 패치]
-    # 실제 요청 보낼 파라미터 딕셔너리
     params = {
         "keyword": keyword,
         "limit": "4"
     }
     
-    # 쿠팡 규격: 서명용 쿼리스트링은 반드시 'keyword=값&limit=4' 형태여야 함
     query_string = f"keyword={keyword}&limit=4"
-
-    # 쿠팡 정식 규격 타임스탬프 (GMT)
     datetime_gmt = time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())
-    
-    # 서명 생성용 메시지 조립
     message = datetime_gmt + "GET" + path + query_string
 
     signature = hmac.new(
@@ -71,7 +64,6 @@ def get_coupang_products(keyword, access_key, secret_key):
     url = f"{domain}{path}"
 
     try:
-        # ⚠️ 주소 뒤에 물음표를 붙이지 않고 params 옵션으로 정석 호출
         res = requests.get(url, headers=headers, params=params, timeout=10)
         print(f"📡 쿠팡 서버 응답 상태코드: {res.status_code}")
         
@@ -87,9 +79,9 @@ def get_coupang_products(keyword, access_key, secret_key):
 def main():
     print("🔄 [쿠팡 파트너스 x 블로그스팟] 무결성 자동화 공장을 가동합니다.")
     
-    # ⚠️ [금고 이름 엇박자 방지 패치] 이름이 뭐든 다 긁어오도록 상호 보완 적용!
-    access_key = (os.environ.get("COUPANG_ACCESS_KEY") or os.environ.get("ACCESS_KEY") or "").strip()
-    secret_key = (os.environ.get("COUPANG_SECRET_KEY") or os.environ.get("SECRET_KEY") or "").strip()
+    # ⚠️ [변수 이름 매칭 완료] 꺼내온 열쇠 이름과 밑에서 검사하는 이름을 일치시켰습니다!
+    coupang_access = (os.environ.get("COUPANG_ACCESS_KEY") or os.environ.get("ACCESS_KEY") or "").strip()
+    coupang_secret = (os.environ.get("COUPANG_SECRET_KEY") or os.environ.get("SECRET_KEY") or "").strip()
     gemini_key = (os.environ.get("API_KEY") or "").strip()
     token_base64 = (os.environ.get("TOKEN_PICKLE_BASE64") or "").strip()
     
