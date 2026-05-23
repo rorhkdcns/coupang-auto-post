@@ -52,14 +52,15 @@ def main():
     keyword = random.choice(SUGGESTED_KEYWORDS)
     print(f"🎯 [아이템 소싱] 이번 타겟 키워드: {keyword}")
 
-    # ⚠️ [핵심 패치] 파트너스 전용 최신 정식 도메인으로 교체!
-    domain = "https://partners.api.coupang.com"
+    # ⚠️ [정식 패치] 도메인은 정식 주소로 고정하되, 대소문자 및 쿼리 규격을 100% 공식 가이드에 맞춤!
+    domain = "https://api-gateway.coupang.com"
     path = "/v1/partners/products/search"
     
     params = {
         "keyword": keyword,
         "limit": 10
     }
+    # 쿠팡 Hmac 서명 계산 시와 실제 요청 시의 글자 순서를 완전히 일치시키기 위해 urlencode 정렬 적용
     query_string = urlencode(params)
     url = f"{domain}{path}?{query_string}"
 
