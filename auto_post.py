@@ -21,11 +21,14 @@ import time
 import json
 import base64
 import datetime
-from urllib.parse import quote  # ⚠️ 한글 깨짐 방지용 정석 도구 도입
+from urllib.parse import quote
 
-BLOG_ID = "8715372631292128719"  
-GOOGLE_ADSENSE_CLIENT = "ca-pub-4292478378917157"
-GOOGLE_ADSENSE_SLOT = "7988651325"
+# =====================================================================
+# ⚙️ [고유 설정 정보] 형의 진짜 정보들로 꼭 채워 넣어주세요!
+# =====================================================================
+BLOG_ID = "형의_진짜_블로그_ID_입력"  
+GOOGLE_ADSENSE_CLIENT = "형의_애드센스_pub_코드_입력"
+GOOGLE_ADSENSE_SLOT = "형의_애드센스_slot_코드_입력"
 
 SUGGESTED_KEYWORDS = ["생수", "노트북", "골프채", "비타민", "마사지기", "청소기"]
 
@@ -33,14 +36,13 @@ def get_coupang_products(keyword, access_key, secret_key):
     domain = "https://api-gateway.coupang.com"
     path = "/v1/partners/products/search"
     
-    # ⚠️ [한글 404 차단 패치] 한글 키워드를 쿠팡 규격에 맞게 미리 URL 인코딩 처리
-    encoded_keyword = quote(keyword)
-query_string = f"keyword={encoded_keyword}&limit=4" # ❌ 이미 인코딩된 한글이 들어감
+    query_string_raw = f"keyword={keyword}&limit=4"
+    query_string_encoded = f"keyword={quote(keyword)}&limit=4"
 
-# 쿠팡은 서명 구울 때 인코딩 안 된 생 한글("노트북")을 원하는데, 
-# 여기 들어가는 query_string은 외계어("%EB%8E%90...")로 조립된 상태입니다.
-message = datetime_gmt + "GET" + path + query_string
+    datetime_gmt = time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())
+    message = datetime_gmt + "GET" + path + query_string_raw
 
+    # 🛠️ 들여쓰기(스페이스바 4칸 단위) 칼각 정렬 완료!
     signature = hmac.new(
         bytes(secret_key, "utf-8"),
         bytes(message, "utf-8"),
@@ -52,7 +54,7 @@ message = datetime_gmt + "GET" + path + query_string
         "Authorization": f"CEA algorithm=HmacSHA256, access-key={access_key}, signed-date={datetime_gmt}, signature={signature}"
     }
 
-    url = f"{domain}{path}?{query_string}"
+    url = f"{domain}{path}?{query_string_encoded}"
 
     try:
         res = requests.get(url, headers=headers, timeout=10)
