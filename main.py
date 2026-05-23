@@ -16,6 +16,12 @@ jobs:
       with:
         python-version: '3.10'
 
+    # 📦 필수 라이브러리들을 깃허브 서버에 먼저 설치하는 꿀단지 단계입니다!
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests google-auth-oauthlib google-auth-httplib2 google-api-python-client google-genai
+
     - name: Run Auto Post Script
       env:
         API_KEY: ${{ secrets.API_KEY }}
