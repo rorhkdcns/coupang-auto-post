@@ -14,7 +14,7 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.10'
+        python-version: '3.12'
 
     # 📦 파이썬이 구글 블로그와 제미나이를 주무를 수 있게 도구를 미리 깔아줍니다!
     - name: Install dependencies
