@@ -23,9 +23,9 @@ import base64
 import datetime
 from urllib.parse import quote  # ⚠️ 한글 깨짐 방지용 정석 도구 도입
 
-BLOG_ID = "형의_진짜_블로그_ID_입력"  
-GOOGLE_ADSENSE_CLIENT = "형의_애드센스_pub_코드_입력"
-GOOGLE_ADSENSE_SLOT = "형의_애드센스_slot_코드_입력"
+BLOG_ID = "8715372631292128719"  
+GOOGLE_ADSENSE_CLIENT = "ca-pub-4292478378917157"
+GOOGLE_ADSENSE_SLOT = "7988651325"
 
 SUGGESTED_KEYWORDS = ["생수", "노트북", "골프채", "비타민", "마사지기", "청소기"]
 
