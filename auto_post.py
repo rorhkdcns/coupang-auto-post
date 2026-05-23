@@ -2,7 +2,7 @@ import os
 import sys
 import subprocess
 
-# 📦 [무적 패치] 실행되자마자 필요한 도구들을 강제로 설치합니다.
+# 📦 필수 도구 강제 설치
 try:
     import requests
 except ModuleNotFoundError:
@@ -16,7 +16,7 @@ import hashlib
 import time
 import json
 
-# ⚙️ 고유 설정 정보 (형의 진짜 정보로 채워 넣으세요!)
+# ⚙️ 고유 설정 정보 (형의 정보로 채워 넣으세요!)
 BLOG_ID = "형의_쿠팡_블로그_ID"  
 GOOGLE_ADSENSE_CLIENT = "형의_애드센스_pub_코드"
 GOOGLE_ADSENSE_SLOT = "형의_애드센스_slot_코드"
@@ -52,7 +52,7 @@ def main():
     print(f"🎯 [아이템 소싱] 이번 타겟 키워드: {keyword}")
 
     domain = "https://api-gateway.coupang.com"
-    path = "/v1/v1/partners/products/search"
+    path = "/v1/partners/products/search"  # 100% 정상 주소로 수정 완료!
     query_string = f"keyword={keyword}&limit=10"
     url = domain + path + "?" + query_string
 
@@ -74,7 +74,8 @@ def main():
             print("🚨 키는 정상인데, 검색된 상품 결과 자체가 진짜 0개입니다.")
             return
 
-        print(f"✅ 성공! 상품 {len(products)}개를 무사히 소싱했습니다.")
+        print(f"✅ 대성공!!! 쿠팡에서 상품 {len(products)}개를 정상적으로 긁어왔습니다!")
+        print(f"📦 첫 번째 상품 샘플: {products[0].get('productName')} - {products[0].get('productPrice')}원")
         
     except Exception as e:
         print(f"💥 치명적 오류 발생: {str(e)}")
