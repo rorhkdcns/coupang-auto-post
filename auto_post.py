@@ -35,10 +35,11 @@ def get_coupang_products(keyword, access_key, secret_key):
     
     # ⚠️ [한글 404 차단 패치] 한글 키워드를 쿠팡 규격에 맞게 미리 URL 인코딩 처리
     encoded_keyword = quote(keyword)
-    query_string = f"keyword={encoded_keyword}&limit=4"
+query_string = f"keyword={encoded_keyword}&limit=4" # ❌ 이미 인코딩된 한글이 들어감
 
-    datetime_gmt = time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())
-    message = datetime_gmt + "GET" + path + query_string
+# 쿠팡은 서명 구울 때 인코딩 안 된 생 한글("노트북")을 원하는데, 
+# 여기 들어가는 query_string은 외계어("%EB%8E%90...")로 조립된 상태입니다.
+message = datetime_gmt + "GET" + path + query_string
 
     signature = hmac.new(
         bytes(secret_key, "utf-8"),
