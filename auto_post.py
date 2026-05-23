@@ -41,16 +41,20 @@ def get_coupang_products(keyword, access_key, secret_key):
     domain = "https://api-gateway.coupang.com"
     path = "/v1/partners/products/search"
     
-    # ⚠️ [404 해결 핵심 패치] 
-    # 쿠팡 API는 서명(Signature)을 만들 때와 실제 요청할 때의 쿼리스트링 글자 순서가 완벽히 일치해야 합니다.
-    # 안전하게 알파벳 순서대로 고정하여 조립합니다.
+    # ⚠️ [404 귀신 박멸 핵심 패치]
+    # 실제 요청 보낼 파라미터 딕셔너리
+    params = {
+        "keyword": keyword,
+        "limit": "4"
+    }
+    
+    # 쿠팡 규격: 서명용 쿼리스트링은 반드시 'keyword=값&limit=4' 형태여야 함
     query_string = f"keyword={keyword}&limit=4"
-    url = f"{domain}{path}?{query_string}"
 
     # 쿠팡 정식 규격 타임스탬프 (GMT)
     datetime_gmt = time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())
     
-    # ⚠️ 서명 생성용 메시지 조립 (GET + PATH + QUERY)
+    # 서명 생성용 메시지 조립
     message = datetime_gmt + "GET" + path + query_string
 
     signature = hmac.new(
@@ -64,8 +68,11 @@ def get_coupang_products(keyword, access_key, secret_key):
         "Authorization": f"CEA algorithm=HmacSHA256, access-key={access_key}, signed-date={datetime_gmt}, signature={signature}"
     }
 
+    url = f"{domain}{path}"
+
     try:
-        res = requests.get(url, headers=headers, timeout=10)
+        # ⚠️ 주소 뒤에 물음표를 붙이지 않고 params 옵션으로 정석 호출
+        res = requests.get(url, headers=headers, params=params, timeout=10)
         print(f"📡 쿠팡 서버 응답 상태코드: {res.status_code}")
         
         if res.status_code != 200:
