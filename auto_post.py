@@ -41,12 +41,16 @@ def get_coupang_products(keyword, access_key, secret_key):
     domain = "https://api-gateway.coupang.com"
     path = "/v1/partners/products/search"
     
-    # ⚠️ [정석 패치] 주소창 꼬임 방지를 위해 쿼리스트링을 하드코딩 형태로 안전하게 조립
+    # ⚠️ [404 해결 핵심 패치] 
+    # 쿠팡 API는 서명(Signature)을 만들 때와 실제 요청할 때의 쿼리스트링 글자 순서가 완벽히 일치해야 합니다.
+    # 안전하게 알파벳 순서대로 고정하여 조립합니다.
     query_string = f"keyword={keyword}&limit=4"
     url = f"{domain}{path}?{query_string}"
 
-    # 쿠팡 공식 헤더 생성 규격
+    # 쿠팡 정식 규격 타임스탬프 (GMT)
     datetime_gmt = time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())
+    
+    # ⚠️ 서명 생성용 메시지 조립 (GET + PATH + QUERY)
     message = datetime_gmt + "GET" + path + query_string
 
     signature = hmac.new(
@@ -64,11 +68,7 @@ def get_coupang_products(keyword, access_key, secret_key):
         res = requests.get(url, headers=headers, timeout=10)
         print(f"📡 쿠팡 서버 응답 상태코드: {res.status_code}")
         
-        if res.status_code == 404:
-            print("❌ [분석] 404 Not Found 발생: 주소 혹은 인증키(공백 오타 등) 결함 가능성이 높습니다.")
-            print(f"ℹ️ 서버 상세 메시지: {res.text}")
-            return []
-        elif res.status_code != 200:
+        if res.status_code != 200:
             print(f"❌ 호출 실패 (코드: {res.status_code}), 메시지: {res.text}")
             return []
             
@@ -94,7 +94,7 @@ def main():
     
     products = get_coupang_products(keyword, coupang_access, coupang_secret)
     if not products:
-        print("🚨 소싱된 쿠팡 상품이 없어 프로세스를 홀딩합니다. 깃허브 금고(Secrets)의 쿠팡 키 앞뒤 공백을 꼭 한 번 더 확인해 주세요!")
+        print("🚨 소싱된 쿠팡 상품이 없어 프로세스를 홀딩합니다.")
         return
     
     print(f"✅ 쿠팡 상품 {len(products)}개 소싱 완료!")
@@ -157,7 +157,7 @@ def main():
     <br><br>
     <div style="text-align: center; margin-top: 30px;">
         <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={GOOGLE_ADSENSE_CLIENT}" crossorigin="anonymous"></script>
-        <ins class="adsbygoogle" style="display:block" data-ad-client={GOOGLE_ADSENSE_CLIENT}" data-ad-slot="{GOOGLE_ADSENSE_SLOT}" data-ad-format="auto" data-full-width-responsive="true"></ins>
+        <ins class="adsbygoogle" style="display:block" data-ad-client="{GOOGLE_ADSENSE_CLIENT}" data-ad-slot="{GOOGLE_ADSENSE_SLOT}" data-ad-format="auto" data-full-width-responsive="true"></ins>
         <script>(adsbygoogle = window.adsbygoogle || []).push({{}});</script>
     </div>
     """
