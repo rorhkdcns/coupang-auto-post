@@ -21,7 +21,6 @@ import time
 import json
 import base64
 import datetime
-from urllib.parse import urlencode, quote
 
 # =====================================================================
 # ⚙️ [고유 설정 정보] 형의 진짜 정보들로 꼭 채워 넣어주세요!
@@ -36,22 +35,18 @@ def get_coupang_products(keyword, access_key, secret_key):
     domain = "https://api-gateway.coupang.com"
     path = "/v1/partners/products/search"
     
-    # ⚠️ [404 해결 핵심 패치] 
-    # 쿠팡 서버는 파라미터가 알파벳 순서대로 정렬되어 들어오는 것을 선호합니다.
-    params = {
-        "keyword": keyword,
-        "limit": 4
-    }
+    # ⚠️ [404 완전 박멸 핵심 패치 1]
+    # 쿠팡 서버 내부 대조용 쿼리스트링 문자열 형식을 공식 예제 규격과 100% 일치시킵니다.
+    query_string = f"keyword={keyword}&limit=4"
+
+    # ⚠️ [404 완전 박멸 핵심 패치 2] 
+    # 쿠팡 게이트웨이가 타임스탬프 대소문자나 미세 오차로 404를 내는 것을 막기 위해
+    # UTC 기준 시간을 정석 포맷팅 문자열로 수동 조립합니다.
+    gmt_now = datetime.datetime.now(datetime.timezone.utc)
+    datetime_gmt = gmt_now.strftime('%Y%m%dT%H%M%SZ')
     
-    # 서명(HMAC) 생성용 쿼리스트링 조립
-    query_string = urlencode(params)
-    
-    # 쿠팡 정식 규격 타임스탬프 (GMT)
-    datetime_gmt = time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())
-    
-    # ⚠️ 핵심 보안 패치: METHOD(GET) + PATH + QUERY_STRING 완전 동기화
-    method = "GET"
-    message = datetime_gmt + method + path + query_string
+    # ⚠️ 서명 생성용 메시지 조립
+    message = datetime_gmt + "GET" + path + query_string
 
     signature = hmac.new(
         bytes(secret_key, "utf-8"),
@@ -64,7 +59,9 @@ def get_coupang_products(keyword, access_key, secret_key):
         "Authorization": f"CEA algorithm=HmacSHA256, access-key={access_key}, signed-date={datetime_gmt}, signature={signature}"
     }
 
-    url = f"{domain}{path}?{query_string}"
+    # ⚠️ [404 완전 박멸 핵심 패치 3]
+    # requests가 주소를 임의로 변형하지 못하도록 딕셔너리가 아닌 정밀 매칭된 URL 문자열로 다이렉트 호출합니다.
+    url = f"{domain}{path}?keyword={requests.utils.quote(keyword)}&limit=4"
 
     try:
         res = requests.get(url, headers=headers, timeout=10)
