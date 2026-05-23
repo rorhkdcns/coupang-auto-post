@@ -87,10 +87,11 @@ def get_coupang_products(keyword, access_key, secret_key):
 def main():
     print("🔄 [쿠팡 파트너스 x 블로그스팟] 무결성 자동화 공장을 가동합니다.")
     
-    gemini_key = os.environ.get("API_KEY", "").strip()
-    token_base64 = os.environ.get("TOKEN_PICKLE_BASE64", "").strip()
-    coupang_access = os.environ.get("COUPANG_ACCESS_KEY", "").strip()
-    coupang_secret = os.environ.get("COUPANG_SECRET_KEY", "").strip()
+    # ⚠️ [금고 이름 엇박자 방지 패치] 이름이 뭐든 다 긁어오도록 상호 보완 적용!
+    access_key = (os.environ.get("COUPANG_ACCESS_KEY") or os.environ.get("ACCESS_KEY") or "").strip()
+    secret_key = (os.environ.get("COUPANG_SECRET_KEY") or os.environ.get("SECRET_KEY") or "").strip()
+    gemini_key = (os.environ.get("API_KEY") or "").strip()
+    token_base64 = (os.environ.get("TOKEN_PICKLE_BASE64") or "").strip()
     
     if not (gemini_key and token_base64 and coupang_access and coupang_secret):
         print("❌ [중단] 깃허브 시크릿 금고에 등록되지 않은 키가 있습니다.")
