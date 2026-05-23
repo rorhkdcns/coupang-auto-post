@@ -21,14 +21,14 @@ import time
 import json
 import base64
 import datetime
-from urllib.parse import quote
+from urllib.parse import urlencode, quote
 
 # =====================================================================
 # ⚙️ [고유 설정 정보] 형의 진짜 정보들로 꼭 채워 넣어주세요!
 # =====================================================================
-BLOG_ID = "형의_진짜_블로그_ID_입력"  
-GOOGLE_ADSENSE_CLIENT = "형의_애드센스_pub_코드_입력"
-GOOGLE_ADSENSE_SLOT = "형의_애드센스_slot_코드_입력"
+BLOG_ID = "8715372631292128719"  
+GOOGLE_ADSENSE_CLIENT = "ca-pub-4292478378917157"
+GOOGLE_ADSENSE_SLOT = "7988651325"
 
 SUGGESTED_KEYWORDS = ["생수", "노트북", "골프채", "비타민", "마사지기", "청소기"]
 
@@ -36,13 +36,23 @@ def get_coupang_products(keyword, access_key, secret_key):
     domain = "https://api-gateway.coupang.com"
     path = "/v1/partners/products/search"
     
-    query_string_raw = f"keyword={keyword}&limit=4"
-    query_string_encoded = f"keyword={quote(keyword)}&limit=4"
-
+    # ⚠️ [404 해결 핵심 패치] 
+    # 쿠팡 서버는 파라미터가 알파벳 순서대로 정렬되어 들어오는 것을 선호합니다.
+    params = {
+        "keyword": keyword,
+        "limit": 4
+    }
+    
+    # 서명(HMAC) 생성용 쿼리스트링 조립
+    query_string = urlencode(params)
+    
+    # 쿠팡 정식 규격 타임스탬프 (GMT)
     datetime_gmt = time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())
-    message = datetime_gmt + "GET" + path + query_string_raw
+    
+    # ⚠️ 핵심 보안 패치: METHOD(GET) + PATH + QUERY_STRING 완전 동기화
+    method = "GET"
+    message = datetime_gmt + method + path + query_string
 
-    # 🛠️ 들여쓰기(스페이스바 4칸 단위) 칼각 정렬 완료!
     signature = hmac.new(
         bytes(secret_key, "utf-8"),
         bytes(message, "utf-8"),
@@ -54,11 +64,12 @@ def get_coupang_products(keyword, access_key, secret_key):
         "Authorization": f"CEA algorithm=HmacSHA256, access-key={access_key}, signed-date={datetime_gmt}, signature={signature}"
     }
 
-    url = f"{domain}{path}?{query_string_encoded}"
+    url = f"{domain}{path}?{query_string}"
 
     try:
         res = requests.get(url, headers=headers, timeout=10)
         print(f"📡 쿠팡 서버 응답 상태코드: {res.status_code}")
+        
         if res.status_code != 200:
             print(f"❌ 호출 실패 (코드: {res.status_code}), 메시지: {res.text}")
             return []
