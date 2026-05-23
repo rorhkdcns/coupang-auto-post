@@ -2,7 +2,7 @@ import os
 import sys
 import subprocess
 
-# 📦 필수 도구 강제 설치
+# 📦 필수 도구 자동 설치
 try:
     import requests
 except ModuleNotFoundError:
@@ -15,6 +15,7 @@ import hmac
 import hashlib
 import time
 import json
+from urllib.parse import urlencode
 
 # ⚙️ 고유 설정 정보 (형의 정보로 채워 넣으세요!)
 BLOG_ID = "형의_쿠팡_블로그_ID"  
@@ -52,9 +53,16 @@ def main():
     print(f"🎯 [아이템 소싱] 이번 타겟 키워드: {keyword}")
 
     domain = "https://api-gateway.coupang.com"
-    path = "/v1/partners/products/search"  # 100% 정상 주소로 수정 완료!
-    query_string = f"keyword={keyword}&limit=10"
-    url = domain + path + "?" + query_string
+    path = "/v1/partners/products/search"
+    
+    # ⚠️ [핵심 패치] 쿠팡이 요구하는 정렬(SIM), 제한(10개) 파라미터를 규격에 맞게 딕셔너리로 결합
+    params = {
+        "keyword": keyword,
+        "limit": 10,
+        "sorter": "SIM"  # 정확도순 정렬 필터 추가
+    }
+    query_string = urlencode(params)
+    url = f"{domain}{path}?{query_string}"
 
     try:
         headers = generate_coupang_headers("GET", path, query_string, access_key, secret_key)
