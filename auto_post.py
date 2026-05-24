@@ -25,9 +25,9 @@ import datetime
 # =====================================================================
 # ⚙️ [고유 설정 정보] 형의 진짜 정보들로 꼭 채워 넣어주세요!
 # =====================================================================
-BLOG_ID = "8715372631292128719"  
-GOOGLE_ADSENSE_CLIENT = "ca-pub-4292478378917157"
-GOOGLE_ADSENSE_SLOT = "7988651325"
+BLOG_ID = "형의_진짜_블로그_ID_입력"  
+GOOGLE_ADSENSE_CLIENT = "형의_애드센스_pub_코드_입력"
+GOOGLE_ADSENSE_SLOT = "형의_애드센스_slot_코드_입력"
 
 SUGGESTED_KEYWORDS = ["생수", "노트북", "골프채", "비타민", "마사지기", "청소기"]
 
@@ -36,16 +36,20 @@ def get_coupang_products(keyword, access_key, secret_key):
     path = "/v1/partners/products/search"
     
     # ⚠️ [404 완전 박멸 핵심 패치 1]
-    # 쿠팡 서버 내부 대조용 쿼리스트링 문자열 형식을 공식 예제 규격과 100% 일치시킵니다.
+    # requests가 주소를 마음대로 인코딩해서 왜곡하지 못하도록 params 딕셔너리로 분리합니다.
+    params = {
+        "keyword": keyword,
+        "limit": "4"
+    }
+    
+    # 쿠팡 서버가 내부적으로 대조할 서명용 쿼리스트링 (인코딩 없는 순수 형태)
     query_string = f"keyword={keyword}&limit=4"
 
-    # ⚠️ [404 완전 박멸 핵심 패치 2] 
-    # 쿠팡 게이트웨이가 타임스탬프 대소문자나 미세 오차로 404를 내는 것을 막기 위해
-    # UTC 기준 시간을 정석 포맷팅 문자열로 수동 조립합니다.
+    # 쿠팡 정식 규격 타임스탬프 생성 (GMT 기준)
     gmt_now = datetime.datetime.now(datetime.timezone.utc)
     datetime_gmt = gmt_now.strftime('%Y%m%dT%H%M%SZ')
     
-    # ⚠️ 서명 생성용 메시지 조립
+    # 서명 생성용 메시지 조립 (GET + PATH + QUERY)
     message = datetime_gmt + "GET" + path + query_string
 
     signature = hmac.new(
@@ -59,12 +63,13 @@ def get_coupang_products(keyword, access_key, secret_key):
         "Authorization": f"CEA algorithm=HmacSHA256, access-key={access_key}, signed-date={datetime_gmt}, signature={signature}"
     }
 
-    # ⚠️ [404 완전 박멸 핵심 패치 3]
-    # requests가 주소를 임의로 변형하지 못하도록 딕셔너리가 아닌 정밀 매칭된 URL 문자열로 다이렉트 호출합니다.
-    url = f"{domain}{path}?keyword={requests.utils.quote(keyword)}&limit=4"
+    # ⚠️ [404 완전 박멸 핵심 패치 2]
+    # URL 뒤에 ? 기호나 물음표 조립을 생략하고 pure 주소만 지정합니다.
+    url = f"{domain}{path}"
 
     try:
-        res = requests.get(url, headers=headers, timeout=10)
+        # params=params 옵션을 주면 파이썬이 쿠팡이 원하는 표준 규격으로 안전하게 전송합니다.
+        res = requests.get(url, headers=headers, params=params, timeout=10)
         print(f"📡 쿠팡 서버 응답 상태코드: {res.status_code}")
         
         if res.status_code != 200:
