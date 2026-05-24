@@ -59,12 +59,11 @@ def get_coupang_v2_products(access_key, secret_key):
         }
     }
     
-    # 1. GMT 기준 타임스탬프 생성 (서명과 헤더에 정밀 동기화)
+    # 1. GMT 기준 타임스탬프 생성 (💡 핵심 수정: %Y(4자리 연도) -> %y(2자리 연도) 변경)
     gmt_now = datetime.datetime.now(datetime.timezone.utc)
-    datetime_gmt = gmt_now.strftime('%Y%m%dT%H%M%SZ')
+    datetime_gmt = gmt_now.strftime('%y%m%dT%H%M%SZ')
     
-    # 2. 💡 [401 에러 원인 1 교정] 쿠팡 V2 서명 생성용 메시지 구조 변경
-    # 공식 문서 기준: {Timestamp}{Method}{Path}{QueryString} (바디 데이터는 섞지 않습니다)
+    # 2. 쿠팡 V2 서명 생성용 메시지 구조
     message = datetime_gmt + "POST" + path
 
     # 3. Hmac SHA256 서명 생성
@@ -74,11 +73,11 @@ def get_coupang_v2_products(access_key, secret_key):
         hashlib.sha256
     ).hexdigest()
 
-    # 4. 💡 [401 에러 원인 2 교정] Authorization 헤더 내 쉼표(,) 뒤의 공백을 완전히 제거
+    # 4. Authorization 헤더 규격 (💡 핵심 수정: 쉼표 뒤 공백 1칸 포함)
     authorization_header = (
-        f"CEA algorithm=HmacSHA256,"
-        f"access-key={access_key},"
-        f"signed-date={datetime_gmt},"
+        f"CEA algorithm=HmacSHA256, "
+        f"access-key={access_key}, "
+        f"signed-date={datetime_gmt}, "
         f"signature={signature}"
     )
 
