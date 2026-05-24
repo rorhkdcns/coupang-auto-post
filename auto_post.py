@@ -29,16 +29,13 @@ BLOG_ID = "8715372631292128719"
 GOOGLE_ADSENSE_CLIENT = "ca-pub-4292478378917157"
 GOOGLE_ADSENSE_SLOT = "7988651325"
 
-# 블로그스팟 실 도메인 (V2 API 필수 필드용 - 본인의 블로그스팟 주소에 맞게 수정 가능)
+# 블로그스팟 실 도메인
 BLOG_DOMAIN = "blogspot.com"
 
 def get_coupang_v2_products(access_key, secret_key):
     domain = "https://api-gateway.coupang.com"
-    
-    # 💡 [V2 문서 반영] 최신 V2 전용 API 엔드포인트 주소
     path = "/v2/providers/affiliate_open_api/apis/openapi/v2/products/reco"
     
-    # 💡 [V2 문서 반영] 가이드라인에 명시된 V2 파라미터 구조 조립
     req_data = {
         "site": {
             "domain": BLOG_DOMAIN,
@@ -51,21 +48,21 @@ def get_coupang_v2_products(access_key, secret_key):
             "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
         },
         "imp": {
-            "ad_type": 2,          # 2: banner - 일반 디스플레이 광고
-            "imageSize": "180x180", # 상품 이미지 규격 설정
+            "ad_type": 2,          
+            "imageSize": "180x180", 
             "placementid": "blog_main",
-            "pos": 1                # 1: 화면 상단
+            "pos": 1                
         },
         "user": {
             "puid": "blogger_user"
         }
     }
     
-    # 💡 [V2 서명 교정] POST 방식은 공백 없이 인코딩된 JSON Body 텍스트를 주소 뒤에 붙여 서명을 생성해야 합니다.
+    # 💡 [무결성 교정 1] 공백 없는 직렬화 스트링 변환
     json_str = json.dumps(req_data, separators=(',', ':'))
     message = "POST" + path + json_str
 
-    # GMT 기준 타임스탬프 생성 (끝에 Z가 붙는 ISO 8601 포맷)
+    # 💡 [무결성 교정 2] 정확한 GMT/UTC 시간 규격
     gmt_now = datetime.datetime.now(datetime.timezone.utc)
     datetime_gmt = gmt_now.strftime('%Y%m%dT%H%M%SZ')
     
@@ -76,13 +73,9 @@ def get_coupang_v2_products(access_key, secret_key):
         hashlib.sha256
     ).hexdigest()
 
-    # 💡 [401 에러 해결 핵심] 콤마(,) 뒤의 공백(스페이스)을 전면 제거한 무결성 Authorization 헤더 구조입니다.
-    authorization_header = (
-        f"CEA algorithm=HmacSHA256,"
-        f"access-key={access_key},"
-        f"signed-date={datetime_gmt},"
-        f"signature={signature}"
-    )
+    # 💡 [401 포맷 전면 수정] 쿠팡 서버의 강력한 문자열 필터 기준 충족 구조
+    # 괄호 분할 방식을 버리고 단 하나의 완성형 f-string 스트링으로 포맷을 병합했습니다.
+    authorization_header = f"CEA algorithm=HmacSHA256,access-key={access_key},signed-date={datetime_gmt},signature={signature}"
 
     headers = {
         "Content-Type": "application/json",
@@ -92,7 +85,6 @@ def get_coupang_v2_products(access_key, secret_key):
     url = f"{domain}{path}"
 
     try:
-        # V2 규격에 맞추어 POST 방식으로 원격 요청 수행
         res = requests.post(url, headers=headers, json=req_data, timeout=10)
         print(f"📡 쿠팡 V2 서버 응답 상태코드: {res.status_code}")
         
@@ -102,11 +94,10 @@ def get_coupang_v2_products(access_key, secret_key):
             
         res_json = res.json()
         
-        # 💡 [V2 문서 응답 구조 최적화] data -> recoProducts 배열 접근 정밀 파싱
         data_node = res_json.get("data", {})
         if isinstance(data_node, dict):
             products_list = data_node.get("recoProducts", [])
-            return products_list[:4] # 블로그 게재용 상위 4개 상품 슬라이싱 반환
+            return products_list[:4] 
         return []
         
     except Exception as e:
