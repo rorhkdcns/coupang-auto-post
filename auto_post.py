@@ -59,7 +59,7 @@ def get_coupang_v2_products(access_key, secret_key):
         }
     }
     
-    # 1. GMT 기준 타임스탬프 생성 (💡 핵심 수정: %Y(4자리 연도) -> %y(2자리 연도) 변경)
+    # 1. GMT 기준 타임스탬프 생성 (연도 2자리 %y 필수)
     gmt_now = datetime.datetime.now(datetime.timezone.utc)
     datetime_gmt = gmt_now.strftime('%y%m%dT%H%M%SZ')
     
@@ -73,7 +73,7 @@ def get_coupang_v2_products(access_key, secret_key):
         hashlib.sha256
     ).hexdigest()
 
-    # 4. Authorization 헤더 규격 (💡 핵심 수정: 쉼표 뒤 공백 1칸 포함)
+    # 4. Authorization 헤더 규격 (쉼표 뒤 공백 1칸)
     authorization_header = (
         f"CEA algorithm=HmacSHA256, "
         f"access-key={access_key}, "
@@ -98,12 +98,21 @@ def get_coupang_v2_products(access_key, secret_key):
             
         res_json = res.json()
         
-        data_node = res_json.get("data", {})
-        if isinstance(data_node, dict):
-            # 맞춤 추천 API 상품 리스트 추출
-            products_list = data_node.get("recoProducts", [])
-            return products_list[:4] 
-        return []
+        # 💡 [디버깅] 쿠팡이 정확히 어떤 구조로 데이터를 주는지 확인하기 위해 출력
+        print(f"🔍 쿠팡 원본 데이터: {json.dumps(res_json, ensure_ascii=False)[:500]} ... (생략)")
+        
+        # 💡 [로직 개선] 응답 구조가 리스트인지 딕셔너리인지 모두 대응할 수 있도록 수정
+        data_node = res_json.get("data")
+        products_list = []
+        
+        if isinstance(data_node, list):
+            # data 자체가 상품 리스트(배열)인 경우
+            products_list = data_node
+        elif isinstance(data_node, dict):
+            # data 안에 특정 키(recoProducts, products 등)로 들어있는 경우
+            products_list = data_node.get("recoProducts", []) or data_node.get("products", [])
+            
+        return products_list[:4] 
         
     except Exception as e:
         print(f"💥 쿠팡 V2 통신 중 예외 발생: {str(e)}")
