@@ -129,10 +129,12 @@ def main():
 
     product_info_text = ""
     for idx, p in enumerate(products, 1):
-        # 이미지 URL 프로토콜 보정
-        img_url = p.get('productImage', '')
+        # 💡 이미지 URL 프로토콜 보정 (http -> https 변환 포함)
+        img_url = p.get('productImage', '').strip()
         if img_url.startswith('//'):
             img_url = 'https:' + img_url
+        elif img_url.startswith('http://'):
+            img_url = img_url.replace('http://', 'https://')
 
         product_info_text += f"[상품 {idx}]\n"
         product_info_text += f"- 상품명: {p.get('productName', '상품명 없음')}\n"
@@ -143,7 +145,7 @@ def main():
     print("🤖 [2단계: AI 원고 생성] 제미나이에게 HTML 마케팅 원고 요청 중...")
     ai_client = genai.Client(api_key=gemini_key)
     
-    # 💡 [프롬프트 디자인 최종 리뉴얼] 괄호 제거, 과감한 줄바꿈, 큼직한 소제목
+    # 💡 [프롬프트 디자인 유지 + 엑박 원인(대괄호) 원천 차단]
     prompt = f"""
 당신은 쿠팡 파트너스 전문 에디터입니다.
 제공된 상품 리스트를 활용하여 독자의 호기심을 자극하고 유용한 정보를 제공하는 세련된 블로그 포스팅을 작성해 주세요.
@@ -155,19 +157,19 @@ def main():
 [HTML 및 포맷 디자인 요구사항 (디테일 100% 준수 필수)]
 1. 첫 줄은 무조건 '제목: 호기심 유발 제목' 형식으로 작성하세요. (🚨제목에 대괄호 [ ] 기호는 절대 쓰지 마세요!)
 2. 🚨 마크다운(Markdown) 기호(예: **글씨**, # 제목)는 절대 사용하지 마세요! 오직 순수 HTML 태그만 사용해야 합니다.
-3. 💡 [핵심: 가독성 극대화] 글이 빽빽해 보이지 않도록 문장 1~2개 단위로 과감하게 문단을 나누세요. `<p style="line-height: 1.8; margin-bottom: 25px;">`를 사용하여 단락 사이 여백을 시원하게 확보하세요.
+3. 글이 빽빽해 보이지 않도록 문장 1~2개 단위로 과감하게 문단을 나누세요. `<p style="line-height: 1.8; margin-bottom: 25px;">`를 사용하여 단락 사이 여백을 시원하게 확보하세요.
 4. 💡 컬러 규칙 (반드시 지킬 것):
    - 가격: 반드시 빨간색으로 작성 `<strong style="color:#E52528;">00,000원</strong>`
    - 핵심 키워드/강조: 반드시 핑크색으로 작성 `<strong style="color:#FF1493;">가장 중요한 혜택이나 포인트</strong>`
-5. 💡 [소제목 크기 확대] 글의 흐름을 안내하는 소제목은 본문보다 확실히 크게 보이도록 아래 태그를 그대로 사용하세요.
+5. 글의 흐름을 안내하는 소제목은 본문보다 확실히 크게 보이도록 아래 태그를 그대로 사용하세요.
    <h3 style="font-size: 22px; font-weight: bold; color: #333; border-bottom: 2px solid #FF1493; padding-bottom: 8px; margin-top: 40px; margin-bottom: 20px;">소제목 텍스트</h3>
-6. 💡 상품 이미지 엑박 방지 및 중앙 정렬:
+6. 💡 상품 이미지 엑박 방지 및 중앙 정렬 (🚨주의: src 속성값에 대괄호 [ ] 를 절대 넣지 마세요! URL 주소만 깔끔하게 넣어야 합니다.):
    <div style="text-align: center; margin-bottom: 20px;">
-     <img src="[제공된 이미지주소]" alt="[상품명]" style="width: 100%; max-width: 400px; height: auto; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);" referrerpolicy="no-referrer">
+     <img src="이미지주소" alt="상품명" style="width: 100%; max-width: 400px; height: auto; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);" referrerpolicy="no-referrer">
    </div>
-7. 💡 구매링크 버튼 (파란색):
+7. 💡 구매링크 버튼 (파란색, 🚨주의: href 속성값에 대괄호 [ ] 절대 금지!):
    <div style="text-align: center; margin-top: 15px; margin-bottom: 50px;">
-     <a href="[구매링크]" target="_blank" style="text-decoration:none; color:white; background-color:#007BFF; padding:12px 25px; border-radius:8px; font-weight:bold; display:inline-block; font-size:16px;">👉 상품 자세히 보기</a>
+     <a href="구매링크" target="_blank" style="text-decoration:none; color:white; background-color:#007BFF; padding:12px 25px; border-radius:8px; font-weight:bold; display:inline-block; font-size:16px;">👉 상품 자세히 보기</a>
    </div>
 8. 쿠팡 파트너스 안내 문구는 제가 따로 넣을 테니 본문 내용에만 집중하세요.
 
@@ -179,9 +181,12 @@ def main():
     ai_content = response.text
     print("✅ 제미나이 원고 생성 성공!")
 
+    # 💡 [핵심: 엑박 방지 파이썬 이중 안전장치] AI가 혹시라도 대괄호를 썼다면 강제로 지워버립니다.
+    ai_content = ai_content.replace('src="[http', 'src="http').replace('.jpg]"', '.jpg"').replace('.png]"', '.png"')
+    ai_content = ai_content.replace('href="[http', 'href="http').replace(']" target', '" target')
+
     post_body = "<p style='color: gray; font-size: 0.9em; text-align: center; margin-bottom: 30px;'>💡 이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>"
     
-    # 💡 [핵심 수정] 파이썬에서도 제목의 대괄호를 강제로 한번 더 제거합니다.
     lines = ai_content.strip().split('\n')
     title = f"오늘의 추천 베스트 상품 시리즈"
     content_start_idx = 0
