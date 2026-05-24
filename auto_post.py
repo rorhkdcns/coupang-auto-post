@@ -127,8 +127,10 @@ def main():
     
     print(f"✅ 쿠팡 추천 상품 {len(products)}개 소싱 성공!")
 
-    # 💡 엑박 원천 차단: 파이썬에서 HTML 블록 완벽 조립
+    # 💡 [완벽 방어 로직] AI에게 절대 HTML을 주지 않고 기호만 줍니다.
     product_info_text = ""
+    html_assets = {} # 파이썬이 진짜 HTML을 안전하게 보관할 금고
+    
     for idx, p in enumerate(products, 1):
         img_url = p.get('productImage', '').strip()
         if img_url.startswith('//'):
@@ -140,14 +142,20 @@ def main():
         p_name = p.get('productName', '상품명 없음').replace('"', "'")
         p_price = p.get('productPrice', 0)
 
+        # 파이썬이 완벽하게 조립한 HTML (AI에게 보여주지 않음)
         img_html = f'<div style="text-align: center; margin-bottom: 20px;"><img src="{img_url}" alt="{p_name}" style="width: 100%; max-width: 400px; height: auto; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);" referrerpolicy="no-referrer"></div>'
         btn_html = f'<div style="text-align: center; margin-top: 15px; margin-bottom: 50px;"><a href="{link_url}" target="_blank" style="text-decoration:none; color:white; background-color:#007BFF; padding:12px 25px; border-radius:8px; font-weight:bold; display:inline-block; font-size:16px;">👉 상품 자세히 보기</a></div>'
 
+        # 금고에 저장
+        html_assets[f"[[IMAGE_{idx}]]"] = img_html
+        html_assets[f"[[BUTTON_{idx}]]"] = btn_html
+
+        # AI에게는 빈칸 기호만 전달
         product_info_text += f"[상품 {idx}]\n"
         product_info_text += f"- 상품명: {p_name}\n"
         product_info_text += f"- 가격: {p_price}원\n"
-        product_info_text += f"- 이미지_HTML: {img_html}\n"
-        product_info_text += f"- 버튼_HTML: {btn_html}\n\n"
+        product_info_text += f"- 이미지 삽입 기호: [[IMAGE_{idx}]]\n"
+        product_info_text += f"- 버튼 삽입 기호: [[BUTTON_{idx}]]\n\n"
 
     print("🤖 [2단계: AI 원고 생성] 제미나이에게 HTML 마케팅 원고 요청 중...")
     ai_client = genai.Client(api_key=gemini_key)
@@ -163,21 +171,20 @@ def main():
 [HTML 및 포맷 디자인 요구사항 (디테일 100% 준수 필수)]
 1. 첫 줄은 무조건 '제목: 호기심 유발 제목' 형식으로 작성하세요. (🚨제목에 대괄호 [ ] 기호는 절대 쓰지 마세요!)
 2. 🚨 마크다운(Markdown) 기호(예: **글씨**, # 제목)는 절대 사용하지 마세요! 오직 순수 HTML 태그만 사용해야 합니다.
-3. 💡 [가독성 극대화] 글이 빽빽해 보이지 않도록 문장 1~2개 단위로 과감하게 문단을 나누세요. `<p style="line-height: 1.8; margin-bottom: 25px;">`를 사용하여 단락 사이 여백을 시원하게 확보하세요.
-4. 💡 컬러 규칙 (반드시 지킬 것):
+3. 글이 빽빽해 보이지 않도록 문장 1~2개 단위로 과감하게 문단을 나누세요. `<p style="line-height: 1.8; margin-bottom: 25px;">`를 사용하여 단락 사이 여백을 시원하게 확보하세요.
+4. 컬러 규칙 (반드시 지킬 것):
    - 가격: 반드시 빨간색으로 작성 `<strong style="color:#E52528;">00,000원</strong>`
    - 핵심 키워드/강조: 반드시 핑크색으로 작성 `<strong style="color:#FF1493;">가장 중요한 혜택이나 포인트</strong>`
 5. 글의 흐름을 안내하는 소제목은 본문보다 확실히 크게 보이도록 아래 태그를 그대로 사용하세요.
    <h3 style="font-size: 22px; font-weight: bold; color: #333; border-bottom: 2px solid #FF1493; padding-bottom: 8px; margin-top: 40px; margin-bottom: 20px;">소제목 텍스트</h3>
-6. 🚨 [절대 규칙: 이미지와 버튼 태그 조작 금지] 
-   각 상품을 소개할 때, 제공된 `이미지_HTML`과 `버튼_HTML`을 **단 한 글자도 수정하지 말고 그대로 복사해서** 붙여넣으세요. 절대 AI 임의로 img 태그나 a 태그를 생성하지 마세요!
+6. 🚨 [절대 규칙: 이미지와 버튼은 무조건 제공된 '기호'만 쓸 것] 
+   각 상품을 소개할 때, 제공된 `[[IMAGE_1]]` 이나 `[[BUTTON_1]]` 같은 기호를 텍스트 그대로 본문에 입력하세요. 절대로 당신이 임의로 <img ...> 나 <a ...> 태그를 만들어내면 안 됩니다! 오직 기호만 적어두면 됩니다.
 7. 쿠팡 파트너스 안내 문구는 제가 따로 넣을 테니 본문 내용에만 집중하세요.
 
 [상품 리스트]
 {product_info_text}
 """
     
-    # 💡 [핵심] 503 서버 오류를 끝까지 버티는 생존 로직 (재시도 최대 5번, 20초 텀)
     max_retries = 5
     ai_content = ""
     for attempt in range(max_retries):
@@ -192,12 +199,16 @@ def main():
                 print("⏳ 구글 서버 트래픽 혼잡... 20초 후 다시 시도합니다.")
                 time.sleep(20)
             else:
-                print("❌ 제미나이 API 최종 실패. 트래픽 문제가 심각하여 프로세스를 종료합니다.")
+                print("❌ 제미나이 API 최종 실패.")
                 sys.exit(1)
+
+    # 💡 [핵심 3: 파이썬이 기호를 진짜 완벽한 HTML로 치환 (바꿔치기)]
+    # 제미나이가 쓴 원고 안의 [[IMAGE_1]], [[BUTTON_1]] 등을 실제 태그로 변환합니다.
+    for key, actual_html in html_assets.items():
+        ai_content = ai_content.replace(key, actual_html)
 
     post_body = "<p style='color: gray; font-size: 0.9em; text-align: center; margin-bottom: 30px;'>💡 이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>"
     
-    # 파이썬에서 제목 대괄호 강제 2차 제거
     lines = ai_content.strip().split('\n')
     title = f"오늘의 추천 베스트 상품 시리즈"
     content_start_idx = 0
@@ -210,7 +221,6 @@ def main():
             
     post_body += "\n".join(lines[content_start_idx:])
 
-    # 애드센스는 본문 최하단에 삽입됩니다.
     adsense_code = f"<div style='margin-top: 50px;'><ins class='adsbygoogle' style='display:block' data-ad-client='{GOOGLE_ADSENSE_CLIENT}' data-ad-slot='{GOOGLE_ADSENSE_SLOT}' data-ad-format='auto' data-full-width-responsive='true'></ins></div>"
     post_body += adsense_code
 
