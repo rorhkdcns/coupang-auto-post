@@ -226,8 +226,8 @@ def main():
         
         blogger_service = build('blogger', 'v3', credentials=credentials)
         
-        tomorrow = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
-        scheduled_time = tomorrow.replace(hour=23, minute=0, second=0, microsecond=0).strftime('%Y-%m-%dT%H:%M:%SZ')
+        publish_time = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
+        scheduled_time = publish_time.strftime('%Y-%m-%dT%H:%M:%SZ')
 
         new_post = {
             "kind": "blogger#post",
