@@ -29,21 +29,41 @@ BLOG_ID = "8715372631292128719"
 GOOGLE_ADSENSE_CLIENT = "ca-pub-4292478378917157"
 GOOGLE_ADSENSE_SLOT = "7988651325"
 
-# 🎯 공식 문서 기준 카테고리 ID 리스트
-# 1011: 식품, 1016: 가전디지털, 1019: 생활용품, 1021: 스포츠/레저
-CATEGORY_IDS = ["1011", "1016", "1019", "1021"] 
+# 블로그스팟 실 도메인 (V2 API 필수 필드용 - 본인의 블로그스팟 주소에 맞게 수정 가능)
+BLOG_DOMAIN = "blogspot.com"
 
-def get_coupang_best_products(category_id, access_key, secret_key):
+def get_coupang_v2_products(access_key, secret_key):
     domain = "https://api-gateway.coupang.com"
     
-    # 💡 [공식 문서 저격 교정] /products/best/{categoryId} 구조를 정확히 맞췄습니다.
-    path = f"/v1/partners/products/best/{category_id}"
+    # 💡 [V2 문서 저격] 최신 V2 전용 API 엔드포인트 주소
+    path = "/v2/providers/affiliate_open_api/apis/openapi/v2/products/reco"
     
-    # 💡 [공식 문서 저격 교정] 쿼리 스트링 파라미터 규격
-    query_string = "limit=4"
+    # 💡 [V2 문서 저격] 가이드라인에 명시된 V2 파라미터 규격 조립
+    req_data = {
+        "site": {
+            "domain": BLOG_DOMAIN,
+            "id": BLOG_ID
+        },
+        "device": {
+            "id": "DESKTOP_ID",
+            "ip": "127.0.0.1",
+            "lmt": 0,
+            "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        },
+        "imp": {
+            "ad_type": 2,          # 2: banner - 일반 디스플레이 광고
+            "imageSize": "180x180", # 필요한 상품 이미지 크기
+            "placementid": "blog_main",
+            "pos": 1                # 1: 화면 상단
+        },
+        "user": {
+            "puid": "blogger_user"
+        }
+    }
     
-    # 1. 서명(Signature) 생성 (Method + Path + QueryString)
-    message = "GET" + path + query_string
+    # 💡 [V2 서명 교정] POST 방식은 공백 없이 인코딩된 JSON Body 텍스트를 주소 뒤에 붙여야 합니다.
+    json_str = json.dumps(req_data, separators=(',', ':'))
+    message = "POST" + path + json_str
 
     # GMT 기준 타임스탬프 생성
     gmt_now = datetime.datetime.now(datetime.timezone.utc)
@@ -62,12 +82,12 @@ def get_coupang_best_products(category_id, access_key, secret_key):
         "Authorization": f"CEA algorithm=HmacSHA256, access-key={access_key}, signed-date={datetime_gmt}, signature={signature}"
     }
 
-    # 최종 요청 URL
-    url = f"{domain}{path}?{query_string}"
+    url = f"{domain}{path}"
 
     try:
-        res = requests.get(url, headers=headers, timeout=10)
-        print(f"📡 쿠팡 서버 응답 상태코드: {res.status_code}")
+        # 💡 V2 규격에 맞게 POST로 요청 전송
+        res = requests.post(url, headers=headers, json=req_data, timeout=10)
+        print(f"📡 쿠팡 V2 서버 응답 상태코드: {res.status_code}")
         
         if res.status_code != 200:
             print(f"❌ 호출 실패 (코드: {res.status_code}), 메시지: {res.text}")
@@ -75,19 +95,20 @@ def get_coupang_best_products(category_id, access_key, secret_key):
             
         res_json = res.json()
         
-        # 💡 [공식 문서 응답 반영 교정] 
-        # 문서 상Successfully get products 시 'data' 키에 배열([])이 바로 대응됩니다.
-        products_list = res_json.get("data", [])
-        if isinstance(products_list, list):
-            return products_list
+        # 💡 [V2 문서 응답 트리 반영] data -> recoProducts 배열 추출
+        data_node = res_json.get("data", {})
+        if isinstance(data_node, dict):
+            products_list = data_node.get("recoProducts", [])
+            # 블로그 레이아웃 상 상위 4개 상품만 추출
+            return products_list[:4]
         return []
         
     except Exception as e:
-        print(f"💥 쿠팡 통신 중 예외 발생: {str(e)}")
+        print(f"💥 쿠팡 V2 통신 중 예외 발생: {str(e)}")
         return []
 
 def main():
-    print("🔄 [쿠팡 파트너스 x 블로그스팟] 무결성 추천상품 자동화 공장을 가동합니다.")
+    print("🔄 [쿠팡 파트너스 API V2 x 블로그스팟] 자동화 공장을 가동합니다.")
     coupang_access = (os.environ.get("COUPANG_ACCESS_KEY") or os.environ.get("ACCESS_KEY") or "").strip()
     coupang_secret = (os.environ.get("COUPANG_SECRET_KEY") or os.environ.get("SECRET_KEY") or "").strip()
     gemini_key = (os.environ.get("API_KEY") or "").strip()
@@ -97,11 +118,8 @@ def main():
         print("❌ [중단] 깃허브 시크릿 금고 열쇠 확인 필요")
         return
 
-    # 타겟 카테고리 랜덤 선정
-    target_category = random.choice(CATEGORY_IDS)
-    print(f"🎯 [1단계: 소싱] 오늘의 타겟 카테고리 ID: {target_category}")
-    
-    products = get_coupang_best_products(target_category, coupang_access, coupang_secret)
+    print("🎯 [1단계: 소싱] 최신 V2 맞춤 추천 상품 호출 중...")
+    products = get_coupang_v2_products(coupang_access, coupang_secret)
     if not products:
         print("🚨 소싱된 쿠팡 추천 상품이 없어 프로세스를 홀딩합니다.")
         return
