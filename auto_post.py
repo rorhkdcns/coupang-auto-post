@@ -34,11 +34,9 @@ BLOG_DOMAIN = "blogspot.com"
 
 def get_coupang_v2_products(access_key, secret_key):
     domain = "https://api-gateway.coupang.com"
-    
-    # 💡 [문서 저격 교정] 쿠팡 가이드라인 V2 비교 표에 명시된 정확한 전송 full path
     path = "/v2/providers/affiliate_open_api/apis/openapi/v2/products/reco"
     
-    # 💡 [문서 저격 교정] 공식 문서 [V2 API 파라미터 예제]의 트리 구조와 완전 일치화
+    # [V2 API 파라미터 규격]
     req_data = {
         "site": {
             "domain": BLOG_DOMAIN,
@@ -61,29 +59,26 @@ def get_coupang_v2_products(access_key, secret_key):
         }
     }
     
-    # 공백과 줄바꿈을 완벽히 통제한 직렬화 데이터 생성
-    json_str = json.dumps(req_data, separators=(',', ':'), ensure_ascii=False)
-    
-    # 💡 서명 생성 메시지 조립
-    message = "POST" + path + json_str
-
-    # GMT 기준 타임스탬프 생성
+    # 1. GMT 기준 타임스탬프 생성 (서명과 헤더에 정밀 동기화)
     gmt_now = datetime.datetime.now(datetime.timezone.utc)
     datetime_gmt = gmt_now.strftime('%Y%m%dT%H%M%SZ')
     
-    # Hmac SHA256 서명 생성
+    # 2. 💡 [401 에러 원인 1 교정] 쿠팡 V2 서명 생성용 메시지 구조 변경
+    # 공식 문서 기준: {Timestamp}{Method}{Path}{QueryString} (바디 데이터는 섞지 않습니다)
+    message = datetime_gmt + "POST" + path
+
+    # 3. Hmac SHA256 서명 생성
     signature = hmac.new(
         bytes(secret_key, "utf-8"),
         bytes(message, "utf-8"),
         hashlib.sha256
     ).hexdigest()
 
-    # 💡 [401 에러 해결의 핵심 키포인트]
-    # 문서의 Example 형식을 재분석한 결과, 쉼표(,) 뒤에 반드시 공백(스페이스 1칸)이 존재해야 포맷 필터를 통과합니다.
+    # 4. 💡 [401 에러 원인 2 교정] Authorization 헤더 내 쉼표(,) 뒤의 공백을 완전히 제거
     authorization_header = (
-        f"CEA algorithm=HmacSHA256, "
-        f"access-key={access_key}, "
-        f"signed-date={datetime_gmt}, "
+        f"CEA algorithm=HmacSHA256,"
+        f"access-key={access_key},"
+        f"signed-date={datetime_gmt},"
         f"signature={signature}"
     )
 
@@ -106,7 +101,7 @@ def get_coupang_v2_products(access_key, secret_key):
         
         data_node = res_json.get("data", {})
         if isinstance(data_node, dict):
-            # 문서 응답 필드 명세인 recoProducts 리스트 추출
+            # 맞춤 추천 API 상품 리스트 추출
             products_list = data_node.get("recoProducts", [])
             return products_list[:4] 
         return []
