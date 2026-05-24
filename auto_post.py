@@ -119,7 +119,7 @@ def main():
         print("❌ [중단] 깃허브 시크릿 금고 열쇠 확인 필요")
         return
 
-    print("🎯 [1단계: 소싱] 최신 V2 맞춤 추천 상품 호출 중...")
+    print("🎯 [1단계: 소 소싱] 최신 V2 맞춤 추천 상품 호출 중...")
     products = get_coupang_v2_products(coupang_access, coupang_secret)
     if not products:
         print("🚨 소싱된 쿠팡 추천 상품이 없어 프로세스를 홀딩합니다.")
@@ -129,7 +129,6 @@ def main():
 
     product_info_text = ""
     for idx, p in enumerate(products, 1):
-        # 💡 이미지 URL 프로토콜 보정 (http -> https 변환 포함)
         img_url = p.get('productImage', '').strip()
         if img_url.startswith('//'):
             img_url = 'https:' + img_url
@@ -145,7 +144,6 @@ def main():
     print("🤖 [2단계: AI 원고 생성] 제미나이에게 HTML 마케팅 원고 요청 중...")
     ai_client = genai.Client(api_key=gemini_key)
     
-    # 💡 [프롬프트 디자인 유지 + 엑박 원인(대괄호) 원천 차단]
     prompt = f"""
 당신은 쿠팡 파트너스 전문 에디터입니다.
 제공된 상품 리스트를 활용하여 독자의 호기심을 자극하고 유용한 정보를 제공하는 세련된 블로그 포스팅을 작성해 주세요.
@@ -177,11 +175,24 @@ def main():
 {product_info_text}
 """
     
-    response = ai_client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
-    ai_content = response.text
-    print("✅ 제미나이 원고 생성 성공!")
+    # 💡 [핵심 추가] 503 서버 오류 대비 재시도(Retry) 방어 로직
+    max_retries = 3
+    ai_content = ""
+    for attempt in range(max_retries):
+        try:
+            response = ai_client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+            ai_content = response.text
+            print("✅ 제미나이 원고 생성 성공!")
+            break
+        except Exception as e:
+            print(f"⚠️ 제미나이 API 호출 실패 (시도 {attempt + 1}/{max_retries}): {e}")
+            if attempt < max_retries - 1:
+                print("⏳ 15초 후 다시 시도합니다...")
+                time.sleep(15)
+            else:
+                print("❌ 제미나이 API 최종 실패. 구글 서버 트래픽 문제로 프로세스를 종료합니다.")
+                return
 
-    # 💡 [핵심: 엑박 방지 파이썬 이중 안전장치] AI가 혹시라도 대괄호를 썼다면 강제로 지워버립니다.
     ai_content = ai_content.replace('src="[http', 'src="http').replace('.jpg]"', '.jpg"').replace('.png]"', '.png"')
     ai_content = ai_content.replace('href="[http', 'href="http').replace(']" target', '" target')
 
@@ -199,7 +210,6 @@ def main():
             
     post_body += "\n".join(lines[content_start_idx:])
 
-    # 애드센스는 본문 최하단에 삽입됩니다.
     adsense_code = f"<div style='margin-top: 50px;'><ins class='adsbygoogle' style='display:block' data-ad-client='{GOOGLE_ADSENSE_CLIENT}' data-ad-slot='{GOOGLE_ADSENSE_SLOT}' data-ad-format='auto' data-full-width-responsive='true'></ins></div>"
     post_body += adsense_code
 
