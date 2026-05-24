@@ -29,18 +29,18 @@ BLOG_ID = "8715372631292128719"
 GOOGLE_ADSENSE_CLIENT = "ca-pub-4292478378917157"
 GOOGLE_ADSENSE_SLOT = "7988651325"
 
-# 🎯 추천 상품 API용 주요 카테고리 ID 리스트 (원하는 카테고리를 추가/변경 가능)
+# 🎯 추천 상품 API용 주요 카테고리 ID 리스트
 # 1001: 여성패션, 1011: 식품, 1016: 가전디지털, 1019: 생활용품, 1021: 스포츠/레저
 CATEGORY_IDS = ["1011", "1016", "1019", "1021"] 
 
 def get_coupang_best_products(category_id, access_key, secret_key):
     domain = "https://api-gateway.coupang.com"
     
-    # ⚠️ [우회 패치] 가장 안정적인 카테고리별 추천(베스트) 상품 엔드포인트 사용
-    path = f"/v1/partners/products/v1/best"
+    # 💡 [교정] 쿠팡 카테고리 베스트 API는 categoryId가 URL 경로(Path) 자체에 포함되어야 합니다.
+    path = f"/v1/partners/products/v1/categories/{category_id}"
     
-    # 추천 상품 API 규격: 쿼리에 categoryId와 limit을 명시 (정렬 문자열)
-    query_string = f"categoryId={category_id}&limit=4"
+    # 💡 [교정] 쿼리 스트링에는 오직 limit만 포함시킵니다.
+    query_string = "limit=4"
     
     # 1. 서명(Signature) 생성 (Method + Path + QueryString)
     message = "GET" + path + query_string
@@ -62,7 +62,7 @@ def get_coupang_best_products(category_id, access_key, secret_key):
         "Authorization": f"CEA algorithm=HmacSHA256, access-key={access_key}, signed-date={datetime_gmt}, signature={signature}"
     }
 
-    # 최종 요청 URL (숫자형 파라미터라 한글 깨짐 우려 없음)
+    # 최종 요청 URL
     url = f"{domain}{path}?{query_string}"
 
     try:
@@ -75,7 +75,12 @@ def get_coupang_best_products(category_id, access_key, secret_key):
             
         # 데이터 추출 구조 보정
         res_json = res.json()
-        return res_json.get("data", [])
+        
+        # 카테고리 베스트 API 응답은 {"data": [...]} 구조이거나 {"data": {"products": [...]}} 구조일 수 있어서 안전하게 체크합니다.
+        data_content = res_json.get("data", [])
+        if isinstance(data_content, dict):
+            return data_content.get("products", [])
+        return data_content
         
     except Exception as e:
         print(f"💥 쿠팡 통신 중 예외 발생: {str(e)}")
@@ -107,10 +112,10 @@ def main():
     product_info_text = ""
     for idx, p in enumerate(products, 1):
         product_info_text += f"[상품 {idx}]\n"
-        product_info_text += f"- 상품명: {p['productName']}\n"
-        product_info_text += f"- 가격: {p['productPrice']}원\n"
-        product_info_text += f"- 구매링크: {p['productUrl']}\n"
-        product_info_text += f"- 이미지주소: {p['productImage']}\n\n"
+        product_info_text += f"- 상품명: {p.get('productName', '상품명 없음')}\n"
+        product_info_text += f"- 가격: {p.get('productPrice', 0)}원\n"
+        product_info_text += f"- 구매링크: {p.get('productUrl', '')}\n"
+        product_info_text += f"- 이미지주소: {p.get('productImage', '')}\n\n"
 
     print("🤖 [2단계: AI 원고 생성] 제미나이에게 HTML 마케팅 원고 요청 중...")
     ai_client = genai.Client(api_key=gemini_key)
