@@ -21,7 +21,6 @@ import time
 import json
 import base64
 import datetime
-from urllib.parse import quote
 
 # =====================================================================
 # ⚙️ [고유 설정 정보]
@@ -30,16 +29,21 @@ BLOG_ID = "8715372631292128719"
 GOOGLE_ADSENSE_CLIENT = "ca-pub-4292478378917157"
 GOOGLE_ADSENSE_SLOT = "7988651325"
 
-SUGGESTED_KEYWORDS = ["생수", "노트북", "골프채", "비타민", "마사지기", "청소기"]
+# 🎯 추천 상품 API용 주요 카테고리 ID 리스트 (원하는 카테고리를 추가/변경 가능)
+# 1001: 여성패션, 1011: 식품, 1016: 가전디지털, 1019: 생활용품, 1021: 스포츠/레저
+CATEGORY_IDS = ["1011", "1016", "1019", "1021"] 
 
-def get_coupang_products(keyword, access_key, secret_key):
+def get_coupang_best_products(category_id, access_key, secret_key):
     domain = "https://api-gateway.coupang.com"
-    path = "/v1/partners/products/search"
     
-    # 1. 서명(Signature) 생성용 메시지 조립
-    # 쿠팡 규격: Method + Path + QueryString (인코딩 전 원본 데이터 기준)
-    query_string_raw = f"keyword={keyword}&limit=4"
-    message = "GET" + path + query_string_raw
+    # ⚠️ [우회 패치] 가장 안정적인 카테고리별 추천(베스트) 상품 엔드포인트 사용
+    path = f"/v1/partners/products/v1/best"
+    
+    # 추천 상품 API 규격: 쿼리에 categoryId와 limit을 명시 (정렬 문자열)
+    query_string = f"categoryId={category_id}&limit=4"
+    
+    # 1. 서명(Signature) 생성 (Method + Path + QueryString)
+    message = "GET" + path + query_string
 
     # GMT 기준 타임스탬프 생성
     gmt_now = datetime.datetime.now(datetime.timezone.utc)
@@ -58,10 +62,8 @@ def get_coupang_products(keyword, access_key, secret_key):
         "Authorization": f"CEA algorithm=HmacSHA256, access-key={access_key}, signed-date={datetime_gmt}, signature={signature}"
     }
 
-    # 2. 실제 전송용 URL 생성 (한글 키워드 퍼센트 인코딩)
-    encoded_keyword = quote(keyword)
-    query_string_send = f"keyword={encoded_keyword}&limit=4"
-    url = f"{domain}{path}?{query_string_send}"
+    # 최종 요청 URL (숫자형 파라미터라 한글 깨짐 우려 없음)
+    url = f"{domain}{path}?{query_string}"
 
     try:
         res = requests.get(url, headers=headers, timeout=10)
@@ -70,13 +72,17 @@ def get_coupang_products(keyword, access_key, secret_key):
         if res.status_code != 200:
             print(f"❌ 호출 실패 (코드: {res.status_code}), 메시지: {res.text}")
             return []
-        return res.json().get("data", {}).get("productData", [])
+            
+        # 데이터 추출 구조 보정
+        res_json = res.json()
+        return res_json.get("data", [])
+        
     except Exception as e:
         print(f"💥 쿠팡 통신 중 예외 발생: {str(e)}")
         return []
 
 def main():
-    print("🔄 [쿠팡 파트너스 x 블로그스팟] 무결성 자동화 공장을 가동합니다.")
+    print("🔄 [쿠팡 파트너스 x 블로그스팟] 무결성 추천상품 자동화 공장을 가동합니다.")
     coupang_access = (os.environ.get("COUPANG_ACCESS_KEY") or os.environ.get("ACCESS_KEY") or "").strip()
     coupang_secret = (os.environ.get("COUPANG_SECRET_KEY") or os.environ.get("SECRET_KEY") or "").strip()
     gemini_key = (os.environ.get("API_KEY") or "").strip()
@@ -86,17 +92,18 @@ def main():
         print("❌ [중단] 깃허브 시크릿 금고 열쇠 확인 필요")
         return
 
-    keyword = random.choice(SUGGESTED_KEYWORDS)
-    print(f"🎯 [1단계: 소싱] 오늘의 타겟 키워드: {keyword}")
+    # 타겟 카테고리 랜덤 선정
+    target_category = random.choice(CATEGORY_IDS)
+    print(f"🎯 [1단계: 소싱] 오늘의 타겟 카테고리 ID: {target_category}")
     
-    products = get_coupang_products(keyword, coupang_access, coupang_secret)
+    products = get_coupang_best_products(target_category, coupang_access, coupang_secret)
     if not products:
-        print("🚨 소싱된 쿠팡 상품이 없어 프로세스를 홀딩합니다.")
+        print("🚨 소싱된 쿠팡 추천 상품이 없어 프로세스를 홀딩합니다.")
         return
     
-    print(f"✅ 쿠팡 상품 {len(products)}개 소싱 완료!")
+    print(f"✅ 쿠팡 추천 상품 {len(products)}개 소싱 성공!")
 
-    # 제미나이에게 넘겨줄 상세 가이드 정보 구조화
+    # 제미나이 전송용 데이터 정제
     product_info_text = ""
     for idx, p in enumerate(products, 1):
         product_info_text += f"[상품 {idx}]\n"
@@ -108,16 +115,15 @@ def main():
     print("🤖 [2단계: AI 원고 생성] 제미나이에게 HTML 마케팅 원고 요청 중...")
     ai_client = genai.Client(api_key=gemini_key)
     
-    # HTML 태그를 직접 삽입하도록 프롬프트 고도화
     prompt = f"""
 당신은 최고의 디지털 마케터이자 블로그 에디터입니다. 
-제공된 상품 리스트를 바탕으로 소비자들의 구매 욕구를 강력하게 자극하는 매력적인 블로그 포스팅을 작성해 주세요.
+제공된 쿠팡 베스트 상품 리스트를 바탕으로 소비자들의 구매 욕구를 강력하게 자극하는 큐레이션 형태의 블로그 포스팅을 작성해 주세요.
 
 [요구사항]
-1. 출력 포맷은 반드시 HTML 태그(<p>, <h2>, <a>, <img> 등)를 활용하여 구조화해 주세요.
+1. 출력 포맷은 반드시 HTML 태그(<p>, <h2>, <a>, <img> 등)를 편리하게 파싱할 수 있도록 완성형으로 작성해 주세요.
 2. 각 상품을 소개할 때, 제공된 '이미지주소'를 <img> 태그로 넣고, '구매링크'를 버튼이나 텍스트 링크(<a href="..." target="_blank">) 형태로 자연스럽게 본문에 포함해 주세요.
-3. 첫 줄에는 '제목: [매력적인 블로그 제목]' 형식으로 제목을 명시해 주세요.
-4. 쿠팡 파트너스 안내 문구는 제가 따로 넣을 테니 본문 내용에만 집중해 주세요.
+3. 첫 줄에는 '제목: [소비자를 이끄는 매력적인 제목]' 형식으로 제목을 명시해 주세요.
+4. 쿠팡 파트너스 안내 문구는 제가 따로 넣을 테니 오직 상품 큐레이션 본문 내용에만 집중해 주세요.
 
 [상품 리스트]
 {product_info_text}
@@ -127,12 +133,12 @@ def main():
     ai_content = response.text
     print("✅ 제미나이 원고 생성 성공!")
 
-    # 3. 본문 조립 (파트너스 배너 문구 상단 고정)
-    post_body = "<p style='color: gray; font-size: 0.9em;'>💡 이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p><br>"
+    # 3. 본문 조립 (파트너스 필수 공정 배너 선삽입)
+    post_body = "<p style='color: gray; font-size: 0.9em; text-align: center;'>💡 이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p><br>"
     
-    # 제목 추출 로직 안정화
+    # 제목 파싱 분리
     lines = ai_content.strip().split('\n')
-    title = f"추천: {keyword}"
+    title = f"오늘의 추천 베스트 상품 시리즈"
     content_start_idx = 0
     
     for i, line in enumerate(lines):
@@ -141,10 +147,10 @@ def main():
             content_start_idx = i + 1
             break
             
-    # 제미나이가 생성한 HTML 본문 그대로 합치기
+    # 본문 데이터 합체
     post_body += "\n".join(lines[content_start_idx:])
 
-    # 애드센스 코드 하단 결합
+    # 하단 구글 애드센스 결합
     adsense_code = f"<br><br><ins class='adsbygoogle' style='display:block' data-ad-client='{GOOGLE_ADSENSE_CLIENT}' data-ad-slot='{GOOGLE_ADSENSE_SLOT}' data-ad-format='auto' data-full-width-responsive='true'></ins>"
     post_body += adsense_code
 
@@ -153,7 +159,7 @@ def main():
         credentials = Credentials.from_authorized_user_info(json.loads(creds_json))
         blogger_service = build('blogger', 'v3', credentials=credentials)
         
-        # 내일 밤 11시 예약 타임스탬프를 구글 API 규격(RFC 3339)에 맞춤
+        # 구글 블로거 규격(RFC 3339) 예약 타임스탬프 (내일 밤 11시 발행)
         tomorrow = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
         scheduled_time = tomorrow.replace(hour=23, minute=0, second=0, microsecond=0).strftime('%Y-%m-%dT%H:%M:%SZ')
 
