@@ -21,6 +21,7 @@ import time
 import json
 import base64
 import datetime
+from urllib.parse import quote  # ⚠️ [핵심] 한글 깨짐 및 인코딩 제어 도구
 
 # =====================================================================
 # ⚙️ [고유 설정 정보] 형의 진짜 정보들로 꼭 채워 넣어주세요!
@@ -35,21 +36,17 @@ def get_coupang_products(keyword, access_key, secret_key):
     domain = "https://api-gateway.coupang.com"
     path = "/v1/partners/products/search"
     
-    # ⚠️ [404 완전 박멸 핵심 패치 1]
-    # requests가 주소를 마음대로 인코딩해서 왜곡하지 못하도록 params 딕셔너리로 분리합니다.
-    params = {
-        "keyword": keyword,
-        "limit": "4"
-    }
-    
-    # 쿠팡 서버가 내부적으로 대조할 서명용 쿼리스트링 (인코딩 없는 순수 형태)
-    query_string = f"keyword={keyword}&limit=4"
+    # ⚠️ [404 완전 박멸 핵심 패치] 
+    # 쿠팡 게이트웨이는 한글 키워드가 대문자 형식으로 퍼센트 인코딩된 주소창을 요구합니다.
+    # 서명용 쿼리스트링과 실제 전송용 쿼리스트링을 완벽하게 일치시킵니다.
+    encoded_keyword = quote(keyword)
+    query_string = f"keyword={encoded_keyword}&limit=4"
 
     # 쿠팡 정식 규격 타임스탬프 생성 (GMT 기준)
     gmt_now = datetime.datetime.now(datetime.timezone.utc)
     datetime_gmt = gmt_now.strftime('%Y%m%dT%H%M%SZ')
     
-    # 서명 생성용 메시지 조립 (GET + PATH + QUERY)
+    # 서명 생성용 메시지 조립
     message = datetime_gmt + "GET" + path + query_string
 
     signature = hmac.new(
@@ -63,13 +60,11 @@ def get_coupang_products(keyword, access_key, secret_key):
         "Authorization": f"CEA algorithm=HmacSHA256, access-key={access_key}, signed-date={datetime_gmt}, signature={signature}"
     }
 
-    # ⚠️ [404 완전 박멸 핵심 패치 2]
-    # URL 뒤에 ? 기호나 물음표 조립을 생략하고 pure 주소만 지정합니다.
-    url = f"{domain}{path}"
+    # ⚠️ requests의 내부 가공을 피하기 위해 인코딩이 완료된 최종 URL 문자열을 다이렉트로 찌릅니다.
+    url = f"{domain}{path}?{query_string}"
 
     try:
-        # params=params 옵션을 주면 파이썬이 쿠팡이 원하는 표준 규격으로 안전하게 전송합니다.
-        res = requests.get(url, headers=headers, params=params, timeout=10)
+        res = requests.get(url, headers=headers, timeout=10)
         print(f"📡 쿠팡 서버 응답 상태코드: {res.status_code}")
         
         if res.status_code != 200:
@@ -105,8 +100,9 @@ def main():
     for p in products:
         product_info_text += f"- 상품명: {p['productName']}\n  가격: {p['productPrice']}원\n  구매링크: {p['productUrl']}\n  이미지: {p['productImage']}\n\n"
 
+    print("🤖 [2단계: AI 원고 생성] 제미나이에게 마케팅 원고 요청 중...")
     ai_client = genai.Client(api_key=gemini_key)
-    prompt = f"당신은 최고의 마케터입니다. 다음 상품 리스트를 보고 블로그 원고를 작성해 주세요:\n{product_info_text}"
+    prompt = f"당신은 최고의 마케터이자 블로그 에디터입니다. 다음 상품 리스트를 보고 강력한 구매 욕구를 자극하는 포스팅 원고를 작성해 주세요:\n{product_info_text}"
     
     response = ai_client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
     ai_content = response.text
