@@ -37,6 +37,7 @@ def get_coupang_v2_products(access_key, secret_key):
     domain = "https://api-gateway.coupang.com"
     path = "/v2/providers/affiliate_open_api/apis/openapi/v2/products/reco"
     
+    # [V2 API 파라미터 규격]
     req_data = {
         "site": {
             "domain": BLOG_DOMAIN,
@@ -59,17 +60,21 @@ def get_coupang_v2_products(access_key, secret_key):
         }
     }
     
+    # 1. GMT 기준 타임스탬프 생성
     gmt_now = datetime.datetime.now(datetime.timezone.utc)
     datetime_gmt = gmt_now.strftime('%y%m%dT%H%M%SZ')
     
+    # 2. 쿠팡 V2 서명 생성용 메시지 구조
     message = datetime_gmt + "POST" + path
 
+    # 3. Hmac SHA256 서명 생성
     signature = hmac.new(
         bytes(secret_key, "utf-8"),
         bytes(message, "utf-8"),
         hashlib.sha256
     ).hexdigest()
 
+    # 4. Authorization 헤더 규격 
     authorization_header = (
         f"CEA algorithm=HmacSHA256, "
         f"access-key={access_key}, "
@@ -93,12 +98,14 @@ def get_coupang_v2_products(access_key, secret_key):
             return []
             
         res_json = res.json()
+        
         data_node = res_json.get("data")
         products_list = []
         
         if isinstance(data_node, list):
             products_list = data_node
         elif isinstance(data_node, dict):
+            # 쿠팡 실 응답 데이터 키인 "result"를 최우선으로 탐색
             products_list = data_node.get("result", []) or data_node.get("recoProducts", []) or data_node.get("products", [])
             
         return products_list[:4] 
@@ -126,6 +133,7 @@ def main():
     
     print(f"✅ 쿠팡 추천 상품 {len(products)}개 소싱 성공!")
 
+    # 제미나이 전송용 데이터 정제
     product_info_text = ""
     for idx, p in enumerate(products, 1):
         product_info_text += f"[상품 {idx}]\n"
@@ -137,28 +145,28 @@ def main():
     print("🤖 [2단계: AI 원고 생성] 제미나이에게 HTML 마케팅 원고 요청 중...")
     ai_client = genai.Client(api_key=gemini_key)
     
-    # 💡 [핵심 변경] 마크다운 금지, 가독성 확보, 중요 키워드 빨간색 볼드체 처리
+    # 💡 [핵심 교정]
+    # 1. '10년차 수석 카피라이터' 등 페르소나 제거 -> 담백한 에디터로 변경
+    # 2. 이미지 엑박 방지(referrerpolicy) 및 가운데 정렬, 크기 키우기 강제
+    # 3. 중요 키워드 빨간색 볼드체 처리
     prompt = f"""
-당신은 10년 차 수석 카피라이터이자 구매 전환율 1위의 블로그 에디터입니다. 
-제공된 쿠팡 상품 리스트를 활용하여 독자가 당장 구매하고 싶게 만드는 매력적인 블로그 포스팅을 작성해 주세요.
+당신은 쿠팡 파트너스 전문 에디터입니다.
+제공된 상품 리스트를 활용하여 독자의 호기심을 자극하고 유용한 정보를 제공하는 세련된 블로그 포스팅을 작성해 주세요.
 
-[작성 핵심 전략: 자연스러운 PASONA 법칙 적용]
-반드시 'PASONA 법칙(Problem - Affinity - Solution - Offer - Narrowing down - Action)'의 흐름에 따라 글을 전개하세요. 
-단, 주의할 점은 절대로 본문에 'Problem', 'Solution', 'PASONA' 같은 이론적 단어나 기호를 직접 노출해서는 안 됩니다. 물 흐르듯 자연스러운 에세이나 리뷰처럼 스토리텔링 하세요.
+[작성 핵심 전략: 담백한 PASONA 법칙 적용]
+반드시 'Problem(고민) - Affinity(공감) - Solution(해결책) - Offer(혜택 제안) - Narrowing down(한정/긴급성) - Action(행동 유도)'의 흐름에 따라 글을 전개하세요.
+단, 주의할 점은 절대로 본문에 'Problem', 'Solution' 같은 이론적 단어를 직접 노출하지 말고, 독자가 "내 고민을 알아주는 에세이"를 읽는 것처럼 자연스럽게 스토리텔링 하세요. 거부감 드는 자화찬은 삼가세요.
 
-1. (문제 제기 & 공감): 독자가 일상에서 겪을 법한 고민이나 불편함을 짚어주고, "맞아요, 저도 요즘 그게 참 고민이더라고요"라며 깊이 공감하는 도입부로 시작하세요.
-2. (해결책 제시): 그 고민을 완벽하게 해결해 줄 '치트키'이자 '구원템'으로 아래의 상품들을 자연스럽게 소개하세요.
-3. (제안 & 한정 혜택): 각 상품의 핵심 소구점(가성비, 압도적 편의성 등)을 매력적으로 어필하고, "왜 지금 당장 알아봐야 하는지"를 언급하여 조급함을 자극하세요.
-4. (행동 촉구 - 강력한 CTA): 각 상품 소개 끝에는 반드시 독자의 클릭을 유도하는 강력하고 직관적인 CTA 문구와 함께 구매 링크를 배치하세요.
-
-[HTML 및 포맷 요구사항 (가독성 극대화)]
+[HTML 및 포맷 요구사항 (가독성과 정보 전달 극대화)]
 1. 첫 줄은 무조건 '제목: [소비자를 이끄는 호기심 유발 제목]' 형식으로 작성하세요.
 2. 🚨 마크다운(Markdown) 기호(예: **글씨**, # 제목)는 절대 사용하지 마세요! 오직 순수 HTML 태그만 사용해야 합니다.
-3. 💡 [핵심] 텍스트가 벽돌처럼 빽빽해 보이지 않도록 문단을 짧게 나누고(<p>, <br> 적극 활용), 각 상품의 가장 중요한 특징, 강력한 혜택, 핵심 키워드에는 반드시 `<strong style="color:#e52528;">중요 키워드</strong>` 형태의 태그를 씌워 빨간색 굵은 글씨로 시선이 꽂히게 만드세요.
+3. 텍스트가 벽돌처럼 빽빽해 보이지 않도록 문단을 짧게 나누고(<p>, <br> 적극 활용), 각 상품의 가장 중요한 특징, 강력한 혜택, **핵심 키워드에는 반드시 `<strong style="color:#e52528;">중요 키워드</strong>` 형태의 태그를 씌워 빨간색 굵은 글씨로 시선이 꽂히게 만드세요.**
 4. 글의 흐름이 잘 읽히도록 시선을 끄는 <h2> 또는 <h3> 태그의 매력적인 소제목을 본문 곳곳에 적극 활용하세요.
-5. 각 상품의 이미지를 넣을 때는 엑박(Broken Image) 현상을 막기 위해 반드시 아래 형태의 HTML 태그로 정확히 작성하세요. (referrerpolicy 속성 필수)
-   <img src="[제공된 이미지주소]" alt="[상품명]" style="max-width:100%; height:auto; margin-bottom:15px;" referrerpolicy="no-referrer">
-6. 구매링크는 CTA 문구가 적용된 <a> 태그(target="_blank" style="text-decoration:none; color:white; background-color:#e52528; padding:10px 20px; border-radius:5px; font-weight:bold; display:inline-block; margin-top:10px;") 형태의 버튼으로 작성하세요.
+5. 💡 각 상품의 이미지를 넣을 때는 엑박(Broken Image) 현상을 막기 위해 반드시 아래 형태의 HTML 태그로 정확히 작성하세요. (referrerpolicy 속성 필수, 이미지 크기 증대 및 가운데 정렬 반영)
+   <div style="text-align: center; margin-bottom: 20px;">
+     <img src="[제공된 이미지주소]" alt="[상품명]" style="width: 100%; max-width: 500px; height: auto;" referrerpolicy="no-referrer">
+   </div>
+6. 구매링크는 CTA(행동 유도) 문구가 적용된 <a> 태그(target="_blank" style="text-decoration:none; color:white; background-color:#e52528; padding:10px 20px; border-radius:5px; font-weight:bold; display:inline-block; margin-top:10px;") 형태의 버튼으로 작성하세요.
 7. 쿠팡 파트너스 안내 문구는 제가 따로 넣을 테니 본문 내용에만 집중하세요.
 
 [상품 리스트]
@@ -169,8 +177,10 @@ def main():
     ai_content = response.text
     print("✅ 제미나이 원고 생성 성공!")
 
+    # 3. 본문 조립 (파트너스 필수 공정 배너 선삽입)
     post_body = "<p style='color: gray; font-size: 0.9em; text-align: center;'>💡 이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p><br>"
     
+    # 제목 파싱 분리
     lines = ai_content.strip().split('\n')
     title = f"오늘의 추천 베스트 상품 시리즈"
     content_start_idx = 0
@@ -181,8 +191,10 @@ def main():
             content_start_idx = i + 1
             break
             
+    # 본문 데이터 합체
     post_body += "\n".join(lines[content_start_idx:])
 
+    # 하단 구글 애드센스 결합
     adsense_code = f"<br><br><ins class='adsbygoogle' style='display:block' data-ad-client='{GOOGLE_ADSENSE_CLIENT}' data-ad-slot='{GOOGLE_ADSENSE_SLOT}' data-ad-format='auto' data-full-width-responsive='true'></ins>"
     post_body += adsense_code
 
@@ -192,6 +204,7 @@ def main():
         
         blogger_service = build('blogger', 'v3', credentials=credentials)
         
+        # 구글 블로거 규격(RFC 3339) 예약 타임스탬프 (내일 밤 11시 발행)
         tomorrow = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
         scheduled_time = tomorrow.replace(hour=23, minute=0, second=0, microsecond=0).strftime('%Y-%m-%dT%H:%M:%SZ')
 
