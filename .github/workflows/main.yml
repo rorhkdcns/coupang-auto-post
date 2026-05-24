@@ -1,7 +1,10 @@
 name: Coupang Auto Blogger CI
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # 👈 수동 실행 버튼 유지
+  schedule:
+    # 💡 UTC 기준 1시, 5시, 9시 = 한국 시간(KST) 오전 10시, 오후 2시, 오후 6시
+    - cron: '0 1,5,9 * * *'
 
 jobs:
   build:
@@ -22,7 +25,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install requests google-auth-oauthlib google-auth-httplib2 google-api-python-client google-genai
 
-    # 🔍 [추가] 시크릿 변수가 정상적으로 로드되는지 사전 검증 (보안 마스킹 처리됨)
+    # 🔍 시크릿 변수가 정상적으로 로드되는지 사전 검증
     - name: Verify Secrets Integrity
       env:
         COUPANG_ACCESS_KEY: ${{ secrets.COUPANG_ACCESS_KEY }}
