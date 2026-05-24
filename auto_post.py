@@ -21,6 +21,7 @@ import time
 import json
 import base64
 import datetime
+import pickle  # 💡 [추가] 0x80 바이너리 에러 해결을 위해 pickle 모듈 추가
 
 # =====================================================================
 # ⚙️ [고유 설정 정보]
@@ -98,16 +99,13 @@ def get_coupang_v2_products(access_key, secret_key):
             
         res_json = res.json()
         
-        # 💡 로그 최소화를 위해 디버깅 출력은 주석 처리 또는 제거했습니다.
-        # print(f"🔍 쿠팡 원본 데이터: {json.dumps(res_json, ensure_ascii=False)[:500]} ... (생략)")
-        
         data_node = res_json.get("data")
         products_list = []
         
         if isinstance(data_node, list):
             products_list = data_node
         elif isinstance(data_node, dict):
-            # 💡 [핵심 수정] 쿠팡 실 응답 데이터 키인 "result"를 최우선으로 찾도록 수정
+            # 쿠팡 실 응답 데이터 키인 "result"를 최우선으로 탐색
             products_list = data_node.get("result", []) or data_node.get("recoProducts", []) or data_node.get("products", [])
             
         return products_list[:4] 
@@ -141,7 +139,6 @@ def main():
         product_info_text += f"[상품 {idx}]\n"
         product_info_text += f"- 상품명: {p.get('productName', '상품명 없음')}\n"
         product_info_text += f"- 가격: {p.get('productPrice', 0)}원\n"
-        # 쿠팡 응답 키값에 유연하게 대응 (productUrl 또는 landingUrl)
         product_info_text += f"- 구매링크: {p.get('productUrl', p.get('landingUrl', ''))}\n"
         product_info_text += f"- 이미지주소: {p.get('productImage', '')}\n\n"
 
@@ -188,8 +185,10 @@ def main():
     post_body += adsense_code
 
     try:
-        creds_json = base64.b64decode(token_base64).decode('utf-8')
-        credentials = Credentials.from_authorized_user_info(json.loads(creds_json))
+        # 💡 [핵심 수정 구간] JSON 디코딩이 아닌 pickle 바이너리로 안전하게 로드
+        creds_bytes = base64.b64decode(token_base64)
+        credentials = pickle.loads(creds_bytes)
+        
         blogger_service = build('blogger', 'v3', credentials=credentials)
         
         # 구글 블로거 규격(RFC 3339) 예약 타임스탬프 (내일 밤 11시 발행)
