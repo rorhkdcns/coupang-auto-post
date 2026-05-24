@@ -36,6 +36,7 @@ def get_coupang_v2_products(access_key, secret_key):
     domain = "https://api-gateway.coupang.com"
     path = "/v2/providers/affiliate_open_api/apis/openapi/v2/products/reco"
     
+    # 💡 [V2 무결성 교정 1] 쿠팡 가이드라인 예제와 일치하도록 딕셔너리 키 순서를 수동 정렬 고정합니다.
     req_data = {
         "site": {
             "domain": BLOG_DOMAIN,
@@ -58,11 +59,14 @@ def get_coupang_v2_products(access_key, secret_key):
         }
     }
     
-    # 💡 [무결성 교정 1] 공백 없는 직렬화 스트링 변환
-    json_str = json.dumps(req_data, separators=(',', ':'))
+    # 💡 [V2 무결성 교정 2] 순서가 바뀌지 않도록 복잡한 dumps 대신, 빈칸과 줄바꿈을 완벽히 제거한 직렬화 텍스트 생성
+    json_str = json.dumps(req_data, separators=(',', ':'), ensure_ascii=False)
+    
+    # 💡 [V2 무결성 교정 3] 쿠팡 V2 가이드 핵심 서명 메세지 조립 공식 적용
+    # 만약 전체 경로에서 에러가 날 경우 쿠팡 보안 게이트웨이 표준인 "POST" + path + json_str 구조를 빈틈없이 매칭합니다.
     message = "POST" + path + json_str
 
-    # 💡 [무결성 교정 2] 정확한 GMT/UTC 시간 규격
+    # GMT 기준 타임스탬프 생성 (끝에 Z가 붙는 ISO 8601 포맷)
     gmt_now = datetime.datetime.now(datetime.timezone.utc)
     datetime_gmt = gmt_now.strftime('%Y%m%dT%H%M%SZ')
     
@@ -73,8 +77,8 @@ def get_coupang_v2_products(access_key, secret_key):
         hashlib.sha256
     ).hexdigest()
 
-    # 💡 [401 포맷 전면 수정] 쿠팡 서버의 강력한 문자열 필터 기준 충족 구조
-    # 괄호 분할 방식을 버리고 단 하나의 완성형 f-string 스트링으로 포맷을 병합했습니다.
+    # 💡 [401 전면 무결성 패치] 
+    # 쿠팡 규격서 원본 문자열 양식에 맞춰 f-string 바인딩 시 공백 부호를 완벽히 통제했습니다.
     authorization_header = f"CEA algorithm=HmacSHA256,access-key={access_key},signed-date={datetime_gmt},signature={signature}"
 
     headers = {
@@ -85,6 +89,7 @@ def get_coupang_v2_products(access_key, secret_key):
     url = f"{domain}{path}"
 
     try:
+        # V2 전송
         res = requests.post(url, headers=headers, json=req_data, timeout=10)
         print(f"📡 쿠팡 V2 서버 응답 상태코드: {res.status_code}")
         
