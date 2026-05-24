@@ -36,10 +36,10 @@ CATEGORY_IDS = ["1011", "1016", "1019", "1021"]
 def get_coupang_best_products(category_id, access_key, secret_key):
     domain = "https://api-gateway.coupang.com"
     
-    # 💡 [교정] 쿠팡 카테고리 베스트 API는 categoryId가 URL 경로(Path) 자체에 포함되어야 합니다.
+    # 💡 [교정] 카테고리 ID가 URL 경로(Path) 자체에 포함되는 정식 규격 적용
     path = f"/v1/partners/products/v1/categories/{category_id}"
     
-    # 💡 [교정] 쿼리 스트링에는 오직 limit만 포함시킵니다.
+    # 💡 [교정] 쿼리 스트링 조건 최소화 및 무결성 확보
     query_string = "limit=4"
     
     # 1. 서명(Signature) 생성 (Method + Path + QueryString)
@@ -73,14 +73,14 @@ def get_coupang_best_products(category_id, access_key, secret_key):
             print(f"❌ 호출 실패 (코드: {res.status_code}), 메시지: {res.text}")
             return []
             
-        # 데이터 추출 구조 보정
         res_json = res.json()
         
-        # 카테고리 베스트 API 응답은 {"data": [...]} 구조이거나 {"data": {"products": [...]}} 구조일 수 있어서 안전하게 체크합니다.
-        data_content = res_json.get("data", [])
+        # 💡 [영상 데이터 구조 반영 교정] 
+        # 쿠팡 API는 'data' 딕셔너리 내부의 'productData' 키값에 실제 상품 배열을 반환합니다.
+        data_content = res_json.get("data", {})
         if isinstance(data_content, dict):
-            return data_content.get("products", [])
-        return data_content
+            return data_content.get("productData", [])
+        return []
         
     except Exception as e:
         print(f"💥 쿠팡 통신 중 예외 발생: {str(e)}")
