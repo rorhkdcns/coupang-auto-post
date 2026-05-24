@@ -21,10 +21,10 @@ import time
 import json
 import base64
 import datetime
-from urllib.parse import quote  # ⚠️ [핵심] 한글 깨짐 및 인코딩 제어 도구
+from urllib.parse import quote
 
 # =====================================================================
-# ⚙️ [고유 설정 정보] 형의 진짜 정보들로 꼭 채워 넣어주세요!
+# ⚙️ [고유 설정 정보]
 # =====================================================================
 BLOG_ID = "8715372631292128719"  
 GOOGLE_ADSENSE_CLIENT = "ca-pub-4292478378917157"
@@ -36,32 +36,32 @@ def get_coupang_products(keyword, access_key, secret_key):
     domain = "https://api-gateway.coupang.com"
     path = "/v1/partners/products/search"
     
-    # ⚠️ [404 완전 박멸 핵심 패치] 
-    # 쿠팡 게이트웨이는 한글 키워드가 대문자 형식으로 퍼센트 인코딩된 주소창을 요구합니다.
-    # 서명용 쿼리스트링과 실제 전송용 쿼리스트링을 완벽하게 일치시킵니다.
-    encoded_keyword = quote(keyword)
-    query_string = f"keyword={encoded_keyword}&limit=4"
+    # 1. 서명(Signature) 생성용 메시지 조립
+    # 쿠팡 규격: Method + Path + QueryString (인코딩 전 원본 데이터 기준)
+    query_string_raw = f"keyword={keyword}&limit=4"
+    message = "GET" + path + query_string_raw
 
-    # 쿠팡 정식 규격 타임스탬프 생성 (GMT 기준)
+    # GMT 기준 타임스탬프 생성
     gmt_now = datetime.datetime.now(datetime.timezone.utc)
     datetime_gmt = gmt_now.strftime('%Y%m%dT%H%M%SZ')
     
-    # 서명 생성용 메시지 조립
-    message = datetime_gmt + "GET" + path + query_string
-
+    # Hmac SHA256 서명 생성
     signature = hmac.new(
         bytes(secret_key, "utf-8"),
         bytes(message, "utf-8"),
         hashlib.sha256
     ).hexdigest()
 
+    # Authorization 헤더 조립
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"CEA algorithm=HmacSHA256, access-key={access_key}, signed-date={datetime_gmt}, signature={signature}"
     }
 
-    # ⚠️ requests의 내부 가공을 피하기 위해 인코딩이 완료된 최종 URL 문자열을 다이렉트로 찌릅니다.
-    url = f"{domain}{path}?{query_string}"
+    # 2. 실제 전송용 URL 생성 (한글 키워드 퍼센트 인코딩)
+    encoded_keyword = quote(keyword)
+    query_string_send = f"keyword={encoded_keyword}&limit=4"
+    url = f"{domain}{path}?{query_string_send}"
 
     try:
         res = requests.get(url, headers=headers, timeout=10)
@@ -96,26 +96,56 @@ def main():
     
     print(f"✅ 쿠팡 상품 {len(products)}개 소싱 완료!")
 
+    # 제미나이에게 넘겨줄 상세 가이드 정보 구조화
     product_info_text = ""
-    for p in products:
-        product_info_text += f"- 상품명: {p['productName']}\n  가격: {p['productPrice']}원\n  구매링크: {p['productUrl']}\n  이미지: {p['productImage']}\n\n"
+    for idx, p in enumerate(products, 1):
+        product_info_text += f"[상품 {idx}]\n"
+        product_info_text += f"- 상품명: {p['productName']}\n"
+        product_info_text += f"- 가격: {p['productPrice']}원\n"
+        product_info_text += f"- 구매링크: {p['productUrl']}\n"
+        product_info_text += f"- 이미지주소: {p['productImage']}\n\n"
 
-    print("🤖 [2단계: AI 원고 생성] 제미나이에게 마케팅 원고 요청 중...")
+    print("🤖 [2단계: AI 원고 생성] 제미나이에게 HTML 마케팅 원고 요청 중...")
     ai_client = genai.Client(api_key=gemini_key)
-    prompt = f"당신은 최고의 마케터이자 블로그 에디터입니다. 다음 상품 리스트를 보고 강력한 구매 욕구를 자극하는 포스팅 원고를 작성해 주세요:\n{product_info_text}"
+    
+    # HTML 태그를 직접 삽입하도록 프롬프트 고도화
+    prompt = f"""
+당신은 최고의 디지털 마케터이자 블로그 에디터입니다. 
+제공된 상품 리스트를 바탕으로 소비자들의 구매 욕구를 강력하게 자극하는 매력적인 블로그 포스팅을 작성해 주세요.
+
+[요구사항]
+1. 출력 포맷은 반드시 HTML 태그(<p>, <h2>, <a>, <img> 등)를 활용하여 구조화해 주세요.
+2. 각 상품을 소개할 때, 제공된 '이미지주소'를 <img> 태그로 넣고, '구매링크'를 버튼이나 텍스트 링크(<a href="..." target="_blank">) 형태로 자연스럽게 본문에 포함해 주세요.
+3. 첫 줄에는 '제목: [매력적인 블로그 제목]' 형식으로 제목을 명시해 주세요.
+4. 쿠팡 파트너스 안내 문구는 제가 따로 넣을 테니 본문 내용에만 집중해 주세요.
+
+[상품 리스트]
+{product_info_text}
+"""
     
     response = ai_client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
     ai_content = response.text
     print("✅ 제미나이 원고 생성 성공!")
 
-    post_body = "💡 이 포스팅은 쿠팡 파트너스 활동의 일환으로 수수료를 제공받습니다.<br><br>"
-    paragraphs = ai_content.split('\n\n')
-    title = paragraphs[0].replace("제목:", "").replace("#", "").strip() if paragraphs else f"추천: {keyword}"
+    # 3. 본문 조립 (파트너스 배너 문구 상단 고정)
+    post_body = "<p style='color: gray; font-size: 0.9em;'>💡 이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p><br>"
     
-    for para in paragraphs:
-        post_body += f"<p>{para.replace('\n', '<br>')}</p>"
+    # 제목 추출 로직 안정화
+    lines = ai_content.strip().split('\n')
+    title = f"추천: {keyword}"
+    content_start_idx = 0
+    
+    for i, line in enumerate(lines):
+        if line.startswith("제목:"):
+            title = line.replace("제목:", "").replace("#", "").strip()
+            content_start_idx = i + 1
+            break
+            
+    # 제미나이가 생성한 HTML 본문 그대로 합치기
+    post_body += "\n".join(lines[content_start_idx:])
 
-    adsense_code = f"<br><ins class='adsbygoogle' data-ad-client='{GOOGLE_ADSENSE_CLIENT}' data-ad-slot='{GOOGLE_ADSENSE_SLOT}'></ins>"
+    # 애드센스 코드 하단 결합
+    adsense_code = f"<br><br><ins class='adsbygoogle' style='display:block' data-ad-client='{GOOGLE_ADSENSE_CLIENT}' data-ad-slot='{GOOGLE_ADSENSE_SLOT}' data-ad-format='auto' data-full-width-responsive='true'></ins>"
     post_body += adsense_code
 
     try:
@@ -123,12 +153,20 @@ def main():
         credentials = Credentials.from_authorized_user_info(json.loads(creds_json))
         blogger_service = build('blogger', 'v3', credentials=credentials)
         
+        # 내일 밤 11시 예약 타임스탬프를 구글 API 규격(RFC 3339)에 맞춤
         tomorrow = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
-        scheduled_time = tomorrow.replace(hour=23, minute=0, second=0, microsecond=0).isoformat()
+        scheduled_time = tomorrow.replace(hour=23, minute=0, second=0, microsecond=0).strftime('%Y-%m-%dT%H:%M:%SZ')
 
-        new_post = {"kind": "blogger#post", "blog": {"id": BLOG_ID}, "title": title, "content": post_body, "published": scheduled_time}
+        new_post = {
+            "kind": "blogger#post",
+            "blog": {"id": BLOG_ID},
+            "title": title,
+            "content": post_body,
+            "published": scheduled_time
+        }
+        
         blogger_service.posts().insert(blogId=BLOG_ID, body=new_post, isDraft=False).execute()
-        print(f"🎯 [성공] '{title}' 예약글 발행 완료!")
+        print(f"🎯 [성공] '{title}' 예약글 발행 완료 (발행 예정 시각: {scheduled_time})")
     except Exception as e:
         print(f"❌ 구글 블로그 업로드 에러: {str(e)}")
 
