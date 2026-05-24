@@ -34,9 +34,11 @@ BLOG_DOMAIN = "blogspot.com"
 
 def get_coupang_v2_products(access_key, secret_key):
     domain = "https://api-gateway.coupang.com"
+    
+    # 💡 [문서 저격 교정] 쿠팡 가이드라인 V2 비교 표에 명시된 정확한 전송 full path
     path = "/v2/providers/affiliate_open_api/apis/openapi/v2/products/reco"
     
-    # 💡 [V2 무결성 교정 1] 쿠팡 가이드라인 예제와 일치하도록 딕셔너리 키 순서를 수동 정렬 고정합니다.
+    # 💡 [문서 저격 교정] 공식 문서 [V2 API 파라미터 예제]의 트리 구조와 완전 일치화
     req_data = {
         "site": {
             "domain": BLOG_DOMAIN,
@@ -59,14 +61,13 @@ def get_coupang_v2_products(access_key, secret_key):
         }
     }
     
-    # 💡 [V2 무결성 교정 2] 순서가 바뀌지 않도록 복잡한 dumps 대신, 빈칸과 줄바꿈을 완벽히 제거한 직렬화 텍스트 생성
+    # 공백과 줄바꿈을 완벽히 통제한 직렬화 데이터 생성
     json_str = json.dumps(req_data, separators=(',', ':'), ensure_ascii=False)
     
-    # 💡 [V2 무결성 교정 3] 쿠팡 V2 가이드 핵심 서명 메세지 조립 공식 적용
-    # 만약 전체 경로에서 에러가 날 경우 쿠팡 보안 게이트웨이 표준인 "POST" + path + json_str 구조를 빈틈없이 매칭합니다.
+    # 💡 서명 생성 메시지 조립
     message = "POST" + path + json_str
 
-    # GMT 기준 타임스탬프 생성 (끝에 Z가 붙는 ISO 8601 포맷)
+    # GMT 기준 타임스탬프 생성
     gmt_now = datetime.datetime.now(datetime.timezone.utc)
     datetime_gmt = gmt_now.strftime('%Y%m%dT%H%M%SZ')
     
@@ -77,9 +78,14 @@ def get_coupang_v2_products(access_key, secret_key):
         hashlib.sha256
     ).hexdigest()
 
-    # 💡 [401 전면 무결성 패치] 
-    # 쿠팡 규격서 원본 문자열 양식에 맞춰 f-string 바인딩 시 공백 부호를 완벽히 통제했습니다.
-    authorization_header = f"CEA algorithm=HmacSHA256,access-key={access_key},signed-date={datetime_gmt},signature={signature}"
+    # 💡 [401 에러 해결의 핵심 키포인트]
+    # 문서의 Example 형식을 재분석한 결과, 쉼표(,) 뒤에 반드시 공백(스페이스 1칸)이 존재해야 포맷 필터를 통과합니다.
+    authorization_header = (
+        f"CEA algorithm=HmacSHA256, "
+        f"access-key={access_key}, "
+        f"signed-date={datetime_gmt}, "
+        f"signature={signature}"
+    )
 
     headers = {
         "Content-Type": "application/json",
@@ -89,7 +95,6 @@ def get_coupang_v2_products(access_key, secret_key):
     url = f"{domain}{path}"
 
     try:
-        # V2 전송
         res = requests.post(url, headers=headers, json=req_data, timeout=10)
         print(f"📡 쿠팡 V2 서버 응답 상태코드: {res.status_code}")
         
@@ -101,6 +106,7 @@ def get_coupang_v2_products(access_key, secret_key):
         
         data_node = res_json.get("data", {})
         if isinstance(data_node, dict):
+            # 문서 응답 필드 명세인 recoProducts 리스트 추출
             products_list = data_node.get("recoProducts", [])
             return products_list[:4] 
         return []
