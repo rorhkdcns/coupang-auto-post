@@ -29,17 +29,17 @@ BLOG_ID = "8715372631292128719"
 GOOGLE_ADSENSE_CLIENT = "ca-pub-4292478378917157"
 GOOGLE_ADSENSE_SLOT = "7988651325"
 
-# 🎯 추천 상품 API용 주요 카테고리 ID 리스트
-# 1001: 여성패션, 1011: 식품, 1016: 가전디지털, 1019: 생활용품, 1021: 스포츠/레저
+# 🎯 공식 문서 기준 카테고리 ID 리스트
+# 1011: 식품, 1016: 가전디지털, 1019: 생활용품, 1021: 스포츠/레저
 CATEGORY_IDS = ["1011", "1016", "1019", "1021"] 
 
 def get_coupang_best_products(category_id, access_key, secret_key):
     domain = "https://api-gateway.coupang.com"
     
-    # 💡 [교정] 카테고리 ID가 URL 경로(Path) 자체에 포함되는 정식 규격 적용
-    path = f"/v1/partners/products/v1/categories/{category_id}"
+    # 💡 [공식 문서 저격 교정] /products/best/{categoryId} 구조를 정확히 맞췄습니다.
+    path = f"/v1/partners/products/best/{category_id}"
     
-    # 💡 [교정] 쿼리 스트링 조건 최소화 및 무결성 확보
+    # 💡 [공식 문서 저격 교정] 쿼리 스트링 파라미터 규격
     query_string = "limit=4"
     
     # 1. 서명(Signature) 생성 (Method + Path + QueryString)
@@ -75,11 +75,11 @@ def get_coupang_best_products(category_id, access_key, secret_key):
             
         res_json = res.json()
         
-        # 💡 [영상 데이터 구조 반영 교정] 
-        # 쿠팡 API는 'data' 딕셔너리 내부의 'productData' 키값에 실제 상품 배열을 반환합니다.
-        data_content = res_json.get("data", {})
-        if isinstance(data_content, dict):
-            return data_content.get("productData", [])
+        # 💡 [공식 문서 응답 반영 교정] 
+        # 문서 상Successfully get products 시 'data' 키에 배열([])이 바로 대응됩니다.
+        products_list = res_json.get("data", [])
+        if isinstance(products_list, list):
+            return products_list
         return []
         
     except Exception as e:
