@@ -37,7 +37,6 @@ def get_coupang_v2_products(access_key, secret_key):
     domain = "https://api-gateway.coupang.com"
     path = "/v2/providers/affiliate_open_api/apis/openapi/v2/products/reco"
     
-    # [V2 API 파라미터 규격]
     req_data = {
         "site": {
             "domain": BLOG_DOMAIN,
@@ -60,21 +59,17 @@ def get_coupang_v2_products(access_key, secret_key):
         }
     }
     
-    # 1. GMT 기준 타임스탬프 생성
     gmt_now = datetime.datetime.now(datetime.timezone.utc)
     datetime_gmt = gmt_now.strftime('%y%m%dT%H%M%SZ')
     
-    # 2. 쿠팡 V2 서명 생성용 메시지 구조
     message = datetime_gmt + "POST" + path
 
-    # 3. Hmac SHA256 서명 생성
     signature = hmac.new(
         bytes(secret_key, "utf-8"),
         bytes(message, "utf-8"),
         hashlib.sha256
     ).hexdigest()
 
-    # 4. Authorization 헤더 규격 
     authorization_header = (
         f"CEA algorithm=HmacSHA256, "
         f"access-key={access_key}, "
@@ -105,7 +100,6 @@ def get_coupang_v2_products(access_key, secret_key):
         if isinstance(data_node, list):
             products_list = data_node
         elif isinstance(data_node, dict):
-            # 쿠팡 실 응답 데이터 키인 "result"를 최우선으로 탐색
             products_list = data_node.get("result", []) or data_node.get("recoProducts", []) or data_node.get("products", [])
             
         return products_list[:4] 
@@ -133,41 +127,48 @@ def main():
     
     print(f"✅ 쿠팡 추천 상품 {len(products)}개 소싱 성공!")
 
-    # 제미나이 전송용 데이터 정제
     product_info_text = ""
     for idx, p in enumerate(products, 1):
+        # 💡 [핵심 수정: 이미지 엑박 방지 로직] URL 맨 앞에 https: 가 빠져있으면 강제로 붙여줍니다.
+        img_url = p.get('productImage', '')
+        if img_url.startswith('//'):
+            img_url = 'https:' + img_url
+
         product_info_text += f"[상품 {idx}]\n"
         product_info_text += f"- 상품명: {p.get('productName', '상품명 없음')}\n"
         product_info_text += f"- 가격: {p.get('productPrice', 0)}원\n"
         product_info_text += f"- 구매링크: {p.get('productUrl', p.get('landingUrl', ''))}\n"
-        product_info_text += f"- 이미지주소: {p.get('productImage', '')}\n\n"
+        product_info_text += f"- 이미지주소: {img_url}\n\n"
 
     print("🤖 [2단계: AI 원고 생성] 제미나이에게 HTML 마케팅 원고 요청 중...")
     ai_client = genai.Client(api_key=gemini_key)
     
-    # 💡 [핵심 교정]
-    # 1. '10년차 수석 카피라이터' 등 페르소나 제거 -> 담백한 에디터로 변경
-    # 2. 이미지 엑박 방지(referrerpolicy) 및 가운데 정렬, 크기 키우기 강제
-    # 3. 중요 키워드 빨간색 볼드체 처리
+    # 💡 [프롬프트 디자인 리뉴얼] 컬러 분리(핑크/레드/블루), 모서리 둥글게, 넉넉한 여백 배치
     prompt = f"""
 당신은 쿠팡 파트너스 전문 에디터입니다.
 제공된 상품 리스트를 활용하여 독자의 호기심을 자극하고 유용한 정보를 제공하는 세련된 블로그 포스팅을 작성해 주세요.
 
 [작성 핵심 전략: 담백한 PASONA 법칙 적용]
-반드시 'Problem(고민) - Affinity(공감) - Solution(해결책) - Offer(혜택 제안) - Narrowing down(한정/긴급성) - Action(행동 유도)'의 흐름에 따라 글을 전개하세요.
-단, 주의할 점은 절대로 본문에 'Problem', 'Solution' 같은 이론적 단어를 직접 노출하지 말고, 독자가 "내 고민을 알아주는 에세이"를 읽는 것처럼 자연스럽게 스토리텔링 하세요. 거부감 드는 자화찬은 삼가세요.
+'고민 - 공감 - 해결책 - 혜택 제안 - 한정/긴급성 - 행동 유도'의 흐름에 따라 글을 전개하세요.
+단, 이론적 단어를 직접 노출하지 말고, 독자가 "내 고민을 알아주는 에세이"를 읽는 것처럼 자연스럽게 스토리텔링 하세요.
 
-[HTML 및 포맷 요구사항 (가독성과 정보 전달 극대화)]
+[HTML 및 포맷 디자인 요구사항 (디테일 100% 준수 필수)]
 1. 첫 줄은 무조건 '제목: [소비자를 이끄는 호기심 유발 제목]' 형식으로 작성하세요.
 2. 🚨 마크다운(Markdown) 기호(예: **글씨**, # 제목)는 절대 사용하지 마세요! 오직 순수 HTML 태그만 사용해야 합니다.
-3. 텍스트가 벽돌처럼 빽빽해 보이지 않도록 문단을 짧게 나누고(<p>, <br> 적극 활용), 각 상품의 가장 중요한 특징, 강력한 혜택, **핵심 키워드에는 반드시 `<strong style="color:#e52528;">중요 키워드</strong>` 형태의 태그를 씌워 빨간색 굵은 글씨로 시선이 꽂히게 만드세요.**
-4. 글의 흐름이 잘 읽히도록 시선을 끄는 <h2> 또는 <h3> 태그의 매력적인 소제목을 본문 곳곳에 적극 활용하세요.
-5. 💡 각 상품의 이미지를 넣을 때는 엑박(Broken Image) 현상을 막기 위해 반드시 아래 형태의 HTML 태그로 정확히 작성하세요. (referrerpolicy 속성 필수, 이미지 크기 증대 및 가운데 정렬 반영)
+3. 글이 빽빽해 보이지 않게 단락을 짧게 끊고, `<p style="line-height: 1.8; margin-bottom: 15px;">`를 사용하여 넉넉한 여백과 가독성을 확보하세요.
+4. 💡 컬러 규칙 (반드시 지킬 것):
+   - 가격: 반드시 빨간색으로 작성 `<strong style="color:#E52528;">00,000원</strong>`
+   - 핵심 키워드/강조: 반드시 핑크색으로 작성 `<strong style="color:#FF1493;">가장 중요한 혜택이나 포인트</strong>`
+5. 글의 흐름을 안내하는 소제목은 `<h3 style="color:#333; border-bottom:2px solid #FF1493; padding-bottom:5px; margin-top:30px;">[소제목]</h3>` 형태로 깔끔하게 디자인하세요.
+6. 💡 상품 이미지 엑박 방지 및 중앙 정렬:
    <div style="text-align: center; margin-bottom: 20px;">
-     <img src="[제공된 이미지주소]" alt="[상품명]" style="width: 100%; max-width: 500px; height: auto;" referrerpolicy="no-referrer">
+     <img src="[제공된 이미지주소]" alt="[상품명]" style="width: 100%; max-width: 400px; height: auto; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);" referrerpolicy="no-referrer">
    </div>
-6. 구매링크는 CTA(행동 유도) 문구가 적용된 <a> 태그(target="_blank" style="text-decoration:none; color:white; background-color:#e52528; padding:10px 20px; border-radius:5px; font-weight:bold; display:inline-block; margin-top:10px;") 형태의 버튼으로 작성하세요.
-7. 쿠팡 파트너스 안내 문구는 제가 따로 넣을 테니 본문 내용에만 집중하세요.
+7. 💡 구매링크 버튼 (파란색):
+   <div style="text-align: center; margin-top: 15px; margin-bottom: 50px;">
+     <a href="[구매링크]" target="_blank" style="text-decoration:none; color:white; background-color:#007BFF; padding:12px 25px; border-radius:8px; font-weight:bold; display:inline-block; font-size:16px;">👉 상품 자세히 보기</a>
+   </div>
+8. 쿠팡 파트너스 안내 문구는 제가 따로 넣을 테니 본문 내용에만 집중하세요.
 
 [상품 리스트]
 {product_info_text}
@@ -177,10 +178,8 @@ def main():
     ai_content = response.text
     print("✅ 제미나이 원고 생성 성공!")
 
-    # 3. 본문 조립 (파트너스 필수 공정 배너 선삽입)
-    post_body = "<p style='color: gray; font-size: 0.9em; text-align: center;'>💡 이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p><br>"
+    post_body = "<p style='color: gray; font-size: 0.9em; text-align: center; margin-bottom: 30px;'>💡 이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>"
     
-    # 제목 파싱 분리
     lines = ai_content.strip().split('\n')
     title = f"오늘의 추천 베스트 상품 시리즈"
     content_start_idx = 0
@@ -191,11 +190,9 @@ def main():
             content_start_idx = i + 1
             break
             
-    # 본문 데이터 합체
     post_body += "\n".join(lines[content_start_idx:])
 
-    # 하단 구글 애드센스 결합
-    adsense_code = f"<br><br><ins class='adsbygoogle' style='display:block' data-ad-client='{GOOGLE_ADSENSE_CLIENT}' data-ad-slot='{GOOGLE_ADSENSE_SLOT}' data-ad-format='auto' data-full-width-responsive='true'></ins>"
+    adsense_code = f"<div style='margin-top: 50px;'><ins class='adsbygoogle' style='display:block' data-ad-client='{GOOGLE_ADSENSE_CLIENT}' data-ad-slot='{GOOGLE_ADSENSE_SLOT}' data-ad-format='auto' data-full-width-responsive='true'></ins></div>"
     post_body += adsense_code
 
     try:
@@ -204,7 +201,6 @@ def main():
         
         blogger_service = build('blogger', 'v3', credentials=credentials)
         
-        # 구글 블로거 규격(RFC 3339) 예약 타임스탬프 (내일 밤 11시 발행)
         tomorrow = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
         scheduled_time = tomorrow.replace(hour=23, minute=0, second=0, microsecond=0).strftime('%Y-%m-%dT%H:%M:%SZ')
 
