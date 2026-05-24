@@ -35,10 +35,10 @@ BLOG_DOMAIN = "blogspot.com"
 def get_coupang_v2_products(access_key, secret_key):
     domain = "https://api-gateway.coupang.com"
     
-    # 💡 [V2 문서 저격] 최신 V2 전용 API 엔드포인트 주소
+    # 💡 [V2 문서 반영] 최신 V2 전용 API 엔드포인트 주소
     path = "/v2/providers/affiliate_open_api/apis/openapi/v2/products/reco"
     
-    # 💡 [V2 문서 저격] 가이드라인에 명시된 V2 파라미터 규격 조립
+    # 💡 [V2 문서 반영] 가이드라인에 명시된 V2 파라미터 구조 조립
     req_data = {
         "site": {
             "domain": BLOG_DOMAIN,
@@ -52,7 +52,7 @@ def get_coupang_v2_products(access_key, secret_key):
         },
         "imp": {
             "ad_type": 2,          # 2: banner - 일반 디스플레이 광고
-            "imageSize": "180x180", # 필요한 상품 이미지 크기
+            "imageSize": "180x180", # 상품 이미지 규격 설정
             "placementid": "blog_main",
             "pos": 1                # 1: 화면 상단
         },
@@ -61,11 +61,11 @@ def get_coupang_v2_products(access_key, secret_key):
         }
     }
     
-    # 💡 [V2 서명 교정] POST 방식은 공백 없이 인코딩된 JSON Body 텍스트를 주소 뒤에 붙여야 합니다.
+    # 💡 [V2 서명 교정] POST 방식은 공백 없이 인코딩된 JSON Body 텍스트를 주소 뒤에 붙여 서명을 생성해야 합니다.
     json_str = json.dumps(req_data, separators=(',', ':'))
     message = "POST" + path + json_str
 
-    # GMT 기준 타임스탬프 생성
+    # GMT 기준 타임스탬프 생성 (끝에 Z가 붙는 ISO 8601 포맷)
     gmt_now = datetime.datetime.now(datetime.timezone.utc)
     datetime_gmt = gmt_now.strftime('%Y%m%dT%H%M%SZ')
     
@@ -76,16 +76,23 @@ def get_coupang_v2_products(access_key, secret_key):
         hashlib.sha256
     ).hexdigest()
 
-    # Authorization 헤더 조립
+    # 💡 [401 에러 해결 핵심] 콤마(,) 뒤의 공백(스페이스)을 전면 제거한 무결성 Authorization 헤더 구조입니다.
+    authorization_header = (
+        f"CEA algorithm=HmacSHA256,"
+        f"access-key={access_key},"
+        f"signed-date={datetime_gmt},"
+        f"signature={signature}"
+    )
+
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"CEA algorithm=HmacSHA256, access-key={access_key}, signed-date={datetime_gmt}, signature={signature}"
+        "Authorization": authorization_header
     }
 
     url = f"{domain}{path}"
 
     try:
-        # 💡 V2 규격에 맞게 POST로 요청 전송
+        # V2 규격에 맞추어 POST 방식으로 원격 요청 수행
         res = requests.post(url, headers=headers, json=req_data, timeout=10)
         print(f"📡 쿠팡 V2 서버 응답 상태코드: {res.status_code}")
         
@@ -95,12 +102,11 @@ def get_coupang_v2_products(access_key, secret_key):
             
         res_json = res.json()
         
-        # 💡 [V2 문서 응답 트리 반영] data -> recoProducts 배열 추출
+        # 💡 [V2 문서 응답 구조 최적화] data -> recoProducts 배열 접근 정밀 파싱
         data_node = res_json.get("data", {})
         if isinstance(data_node, dict):
             products_list = data_node.get("recoProducts", [])
-            # 블로그 레이아웃 상 상위 4개 상품만 추출
-            return products_list[:4]
+            return products_list[:4] # 블로그 게재용 상위 4개 상품 슬라이싱 반환
         return []
         
     except Exception as e:
