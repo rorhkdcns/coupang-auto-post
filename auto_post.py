@@ -237,8 +237,6 @@ def main():
     for key, actual_html in html_assets.items():
         ai_content = ai_content.replace(key, actual_html)
 
-    post_body = "<p style='color: gray; font-size: 0.9em; text-align: center; margin-bottom: 30px;'>💡 이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>"
-    
     lines = ai_content.strip().split('\n')
     title = f"오늘의 추천 베스트 상품 시리즈"
     content_start_idx = 0
@@ -248,37 +246,38 @@ def main():
             title = line.replace("제목:", "").replace("[", "").replace("]", "").replace("#", "").strip()
             content_start_idx = i + 1
             break
-            
-    # 원고 본문 빌드 및 지저분한 HTML 기호 클렌징 적용
+
+    # 🏗️ 애드센스 완전체 스크립트 정의 (상단/하단 공용)
+    def generate_adsense_html(client_id, slot_id):
+        return f"""
+        <div class="adsense-container" style="text-align:center; margin: 30px 0;">
+            <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={client_id}" crossorigin="anonymous"></script>
+            <ins class="adsbygoogle" style="display:block" data-ad-client="{client_id}" data-ad-slot="{slot_id}" data-ad-format="auto" data-full-width-responsive="true"></ins>
+            <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+        </div>
+        """
+
+    # 1. 원고 본문 정화 및 줄바꿈 처리
     raw_body_text = "\n".join(lines[content_start_idx:])
     cleaned_body_text = clean_html_garbage(raw_body_text)
     
-    # 🛡️ [HTML 무결성 3등분 자동 방어 장치] 쿠팡 글에도 적용하여 태그 깨짐 전면 차단
-    paragraphs = [p.strip() for p in cleaned_body_text.split('\n') if p.strip()]
-    total_p = len(paragraphs)
+    # 제미나이가 생성한 단락 구조를 그대로 보존하며 HTML 줄바꿈(br)으로 변환
+    formatted_body = cleaned_body_text.replace('\n', '<br>')
+
+    # 2. 레이아웃 최종 조립 (상단 광고 -> 본문 -> 하단 광고 순)
+    # 쿠팡 수수료 안내 문구는 최상단에 작고 깔끔하게 배치
+    post_body = "<p style='color: #94a3b8; font-size: 13px; text-align: center; margin-bottom: 20px;'>💡 이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>"
     
-    if total_p >= 3:
-        size = total_p // 3
-        part1 = "\n\n".join(paragraphs[:size])
-        part2 = "\n\n".join(paragraphs[size:size*2])
-        part3 = "\n\n".join(paragraphs[size*2:])
-    else:
-        part1 = cleaned_body_text
-        part2 = ""
-        part3 = ""
-
-    # 줄바꿈 변환 적용 후 바인딩
-    b1_html = part1.replace('\n', '<br>')
-    b2_html = f"<br><br>{part2.replace('\n', '<br>')}" if part2 else ""
-    b3_html = f"<br><br>{part3.replace('\n', '<br>')}" if part3 else ""
+    # 🚀 [수익 극대화] 글이 시작되기 바로 직전, 목이 가장 좋은 위치에 최상단 수동 광고 배치!
+    post_body += generate_adsense_html(GOOGLE_ADSENSE_CLIENT, GOOGLE_ADSENSE_SLOT)
     
-    # 순수 본문 결합
-    post_body += f'<div class="post-p1" style="font-size:16px; line-height:1.9; color:#334155; letter-spacing: -0.3px;">{b1_html}{b2_html}{b3_html}</div>'
+    # 순수 마케팅 본문 바인딩 (이미지 및 버튼 치환 완료된 본문)
+    post_body += f'<div class="post-p1" style="font-size:16px; line-height:1.9; color:#334155; letter-spacing: -0.3px; margin-top: 20px;">{formatted_body}</div>'
+    
+    # 🚀 [하단 광고] 쇼핑 정보 탐색이 모두 끝난 지점에 자연스럽게 하단 광고 노출
+    post_body += generate_adsense_html(GOOGLE_ADSENSE_CLIENT, GOOGLE_ADSENSE_SLOT)
 
-    # 하단 애드센스 코드 배치
-    adsense_code = f"<div style='margin-top: 50px;'><ins class='adsbygoogle' style='display:block' data-ad-client='{GOOGLE_ADSENSE_CLIENT}' data-ad-slot='{GOOGLE_ADSENSE_SLOT}' data-ad-format='auto' data-full-width-responsive='true'></ins></div>"
-    post_body += adsense_code
-
+    # 3. 구글 블로그스팟 최종 업로드 및 예약 발행
     try:
         creds_bytes = base64.b64decode(token_base64)
         credentials = pickle.loads(creds_bytes)
