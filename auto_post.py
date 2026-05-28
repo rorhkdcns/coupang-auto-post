@@ -253,7 +253,7 @@ def main():
         <div class="adsense-container" style="text-align:center; margin: 30px 0;">
             <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={client_id}" crossorigin="anonymous"></script>
             <ins class="adsbygoogle" style="display:block" data-ad-client="{client_id}" data-ad-slot="{slot_id}" data-ad-format="auto" data-full-width-responsive="true"></ins>
-            <script>(adsbygoogle = window.adsbygoogle || []).push({});</script>
+            <script>(adsbygoogle = window.adsbygoogle || []).push({{}});</script>
         </div>
         """
 
