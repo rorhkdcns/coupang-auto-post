@@ -118,6 +118,28 @@ def clean_html_garbage(text):
     text = re.sub(r'\[.*?\]\s*:\s*', '', text)
     return text.strip()
 
+# 👇 [추가] 쿠팡 파트너스 맞춤형 예약 및 라이브 포스팅 통합 중복 방지 시스템
+def check_already_posted(blogger, blog_id):
+    kst = datetime.timezone(datetime.timedelta(hours=9))
+    now = datetime.datetime.now(kst)
+    try:
+        # 이 코드는 미래 시점으로 예약(SCHEDULED)을 걸기 때문에 status 인자에 LIVE와 SCHEDULED를 모두 명시해야 안전합니다.
+        posts = blogger.posts().list(blogId=blog_id, maxResults=10, status='LIVE,SCHEDULED').execute()
+        for item in posts.get('items', []):
+            up_str = item.get('updated', '') # 글이 실제 구글 서버에 등록/수정된 물리 시간 기준
+            if up_str:
+                clean_up = up_str.replace('Z', '+00:00')
+                up_time = datetime.datetime.fromisoformat(clean_up).astimezone(kst)
+                time_diff_minutes = (now - up_time).total_seconds() / 60
+                
+                # 💡 동시간대 실행 에러로 인해 최근 30분 이내에 등록된 예약/라이브 글이 발견되면 즉시 차단
+                if 0 <= time_diff_minutes < 30.0:
+                    print(f"⏳ 대기: 최근 {time_diff_minutes:.1f}분 전에 이미 생성된 포스팅(예약 포함)이 존재합니다. 중복 실행을 차단합니다.")
+                    return True
+    except Exception as e:
+        print(f"⚠️ 중복 체크 과정 중 일시적 통신 오류 (안전을 위해 진행): {e}")
+    return False
+
 def main():
     print("🔄 [쿠팡 파트너스 API V2 x 블로그스팟] 자동화 공장을 가동합니다.")
     coupang_access = (os.environ.get("COUPANG_ACCESS_KEY") or os.environ.get("ACCESS_KEY") or "").strip()
@@ -128,6 +150,17 @@ def main():
     if not (gemini_key and token_base64 and coupang_access and coupang_secret):
         print("❌ [중단] 깃허브 시크릿 금고 열쇠 확인 필요")
         return
+
+    # 👇 [추가] 비용이 발생하는 소싱 및 제미나이 원고 생성 단계 전에 미리 차단장치 가동
+    try:
+        creds_bytes = base64.b64decode(token_base64)
+        credentials = pickle.loads(creds_bytes)
+        checker_service = build('blogger', 'v3', credentials=credentials)
+        if check_already_posted(checker_service, BLOG_ID):
+            print("⏩ 동시간대 중복 실행 트래픽이 감지되어 시스템을 안전하게 자동 셧다운합니다.")
+            return
+    except Exception as e:
+        print(f"⚠️ 중복 방어 장치 사전 로드 실패 (본문 단계에서 재검증): {e}")
 
     print("🎯 [1단계: 소싱] 최신 V2 맞춤 추천 상품 호출 중...")
     products = get_coupang_v2_products(coupang_access, coupang_secret)
