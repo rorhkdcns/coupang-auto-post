@@ -38,6 +38,11 @@ from google.genai import types
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
+# =====================================================================
+# ⚙️ [고유 설정 정보]
+# =====================================================================
+TEST_MODE = True # ★ 테스트 끝나고 실전 가동할 땐 이 글자를 False 로 바꾸세요!
+
 BLOG_ID = "8715372631292128719"  
 GOOGLE_ADSENSE_CLIENT = "ca-pub-4292478378917157"
 GOOGLE_ADSENSE_SLOT = "7988651325"
@@ -217,7 +222,13 @@ def main():
     try:
         credentials = pickle.loads(base64.b64decode(token_base64))
         blogger_service = build('blogger', 'v3', credentials=credentials)
-        if check_already_posted(blogger_service, BLOG_ID): return
+        
+        # ★ 테스트 모드 분기 처리
+        if not TEST_MODE:
+            if check_already_posted(blogger_service, BLOG_ID): return
+        else:
+            print("🧪 [테스트 모드 ON] 30분 중복 방지 체크를 패스합니다!")
+            
     except Exception as e: print(f"⚠️ 사전 중복 체크 에러: {e}")
 
     products = get_coupang_v2_products(coupang_access, coupang_secret)
@@ -308,7 +319,6 @@ def main():
     publish_time = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
     scheduled_iso = publish_time.strftime('%Y-%m-%dT%H:%M:%SZ')
 
-    # ★ 진짜 정석 2연타: 처음부터 [영어주소 + 내일예약]으로 대기열 만들고, 제목만 한글 패치!
     try:
         print(f"🔗 [1연타] 예약 대기열에 영어 주소 방 생성 중... (/{slug}.html)")
         res_ins = blogger_service.posts().insert(
@@ -317,7 +327,7 @@ def main():
                 'title': slug, 
                 'content': final_html, 
                 'labels': tags,
-                'published': scheduled_iso # 처음부터 예약 시간을 같이 넣음!
+                'published': scheduled_iso 
             }, 
             isDraft=False
         ).execute()
