@@ -41,7 +41,7 @@ from googleapiclient.discovery import build
 # =====================================================================
 # ⚙️ [고유 설정 정보]
 # =====================================================================
-TEST_MODE = True # ★ 테스트 끝나고 실전 가동할 땐 이 글자를 False 로 바꾸세요!
+TEST_MODE = True # ★ 내일부터 서버 자동화 올릴 땐 반드시 False 로 바꾸세요!
 
 BLOG_ID = "8715372631292128719"  
 GOOGLE_ADSENSE_CLIENT = "ca-pub-4292478378917157"
@@ -56,7 +56,7 @@ def get_coupang_v2_products(access_key, secret_key):
     path = "/v2/providers/affiliate_open_api/apis/openapi/v2/products/reco"
     req_data = {
         "site": {"domain": BLOG_DOMAIN, "id": BLOG_ID},
-        "device": {"id": "DESKTOP_ID", "ip": "127.0.0.1", "lmt": 0, "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
+        "device": {"id": "DESKTOP_ID", "ip": "127.0.0.1", "lmt": 0, "ua": "Mozilla/5.0"},
         "imp": {"ad_type": 2, "imageSize": "180x180", "placementid": "blog_main", "pos": 1},
         "user": {"puid": "blogger_user"}
     }
@@ -94,12 +94,11 @@ def check_already_posted(blogger, blog_id):
     except Exception as e: print(f"⚠️ 중복 체크 에러: {e}")
     return False
 
-def download_and_upload_image_to_github(raw_img_url, prefix="prod"):
+def download_and_upload_image_to_github(proxy_url, prefix="prod"):
     gh_token = os.environ.get("GITHUB_TOKEN")
-    if not gh_token or not raw_img_url: return ""
-    headers = {"User-Agent": "Mozilla/5.0", "Referer": "https://www.coupang.com/"}
+    if not gh_token or not proxy_url: return ""
     try:
-        res = requests.get(raw_img_url, headers=headers, timeout=10)
+        res = requests.get(proxy_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
         if res.status_code != 200: return ""
         img = Image.open(io.BytesIO(res.content)).convert('RGB')
         img.thumbnail((600, 600), Image.Resampling.LANCZOS)
@@ -115,7 +114,7 @@ def download_and_upload_image_to_github(raw_img_url, prefix="prod"):
     except: pass
     return ""
 
-def bake_pil_summary_card(prod_name, price_str, cdn_img_url, bullet_points):
+def bake_pil_summary_card(prod_name, price_str, proxy_img_url, bullet_points):
     gh_token = os.environ.get("GITHUB_TOKEN")
     if not gh_token: return ""
     font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Bold.ttf"
@@ -133,15 +132,14 @@ def bake_pil_summary_card(prod_name, price_str, cdn_img_url, bullet_points):
     except:
         title_font = price_font = bullet_font = badge_font = ImageFont.load_default()
 
-    if cdn_img_url:
-        try:
-            res_img = requests.get(cdn_img_url, timeout=5)
-            p_img = Image.open(io.BytesIO(res_img.content)).convert('RGBA')
-            p_img.thumbnail((350, 350), Image.Resampling.LANCZOS)
-            bg = Image.new('RGBA', p_img.size, (255, 255, 255))
-            composite = Image.alpha_composite(bg, p_img).convert('RGB')
-            card.paste(composite, ((800 - composite.width) // 2, 70))
-        except: pass
+    try:
+        res_img = requests.get(proxy_img_url, timeout=5)
+        p_img = Image.open(io.BytesIO(res_img.content)).convert('RGBA')
+        p_img.thumbnail((350, 350), Image.Resampling.LANCZOS)
+        bg = Image.new('RGBA', p_img.size, (255, 255, 255))
+        composite = Image.alpha_composite(bg, p_img).convert('RGB')
+        card.paste(composite, ((800 - composite.width) // 2, 70))
+    except: pass
 
     draw.rounded_rectangle([330, 440, 470, 475], radius=6, fill='#E52528')
     draw.text((400, 457), "COUPANG PICK", fill='#FFFFFF', font=badge_font, anchor="mm")
@@ -166,6 +164,23 @@ def bake_pil_summary_card(prod_name, price_str, cdn_img_url, bullet_points):
         if res_put.status_code in [200, 201]: return f"https://cdn.jsdelivr.net/gh/{GITHUB_USER_ID}/{GITHUB_REPO_NAME}@main/{git_path}"
     except: pass
     return ""
+
+# ★ 핵심: 환경에 상관없이 100% 사진을 보장하는 3중 방어 이미지 추출기
+def get_bulletproof_image_url(raw_coupang_url, prod_name, price_str, bullets):
+    clean_target = re.sub(r'^https?://', '', raw_coupang_url)
+    weserv_proxy = f"https://images.weserv.nl/?url={urllib.parse.quote(clean_target)}"
+    
+    # 1안: PIL 카드 제작 (깃허브 액션 환경일 때 성공)
+    card_cdn = bake_pil_summary_card(prod_name, price_str, weserv_proxy, bullets)
+    if card_cdn: return card_cdn, True
+    
+    # 2안: 원본 박제 (깃허브 액션 환경일 때 성공)
+    hero_cdn = download_and_upload_image_to_github(weserv_proxy, prefix="hero")
+    if hero_cdn: return hero_cdn, False
+    
+    # 3안: 내 PC 로컬 테스트 등 깃허브 업로드 불가 시 다이렉트 프록시 송출!
+    print("⚠️ [로컬 환경 감지] 깃허브 업로드를 생략하고 실시간 이미지 우회 링크로 대체 송출합니다.")
+    return weserv_proxy, False
 
 def format_paragraphs(text):
     if not text or not text.strip(): return ""
@@ -222,13 +237,10 @@ def main():
     try:
         credentials = pickle.loads(base64.b64decode(token_base64))
         blogger_service = build('blogger', 'v3', credentials=credentials)
-        
-        # ★ 테스트 모드 분기 처리
         if not TEST_MODE:
             if check_already_posted(blogger_service, BLOG_ID): return
         else:
-            print("🧪 [테스트 모드 ON] 30분 중복 방지 체크를 패스합니다!")
-            
+            print("🧪 [테스트 모드 ON] 30분 중복 방지를 패스합니다.")
     except Exception as e: print(f"⚠️ 사전 중복 체크 에러: {e}")
 
     products = get_coupang_v2_products(coupang_access, coupang_secret)
@@ -244,24 +256,25 @@ def main():
 
     print(f"🛒 오늘의 집중 분석 주인공 선정 완료: {p_name}")
 
-    hero_cdn_img = download_and_upload_image_to_github(img_url, prefix="hero")
     ai_client = genai.Client(api_key=gemini_key)
     
+    # ★ 페르소나 대공사: 허세 인플루언서 퇴출 -> 담백한 쇼핑 에디터 탑재
     prompt = (
-        "너는 구독자 10만 명의 '네이버 인플루언서 테크/리뷰 블로거'야. "
+        "너는 과장된 허세 없이 핵심 정보만 담백하게 짚어주는 '스마트 쇼핑 전문 에디터'야. "
         "아래 상품에 대해 스마트폰에서 가독성 좋게 정독되는 집중 분석 칼럼을 작성해줘.\n\n"
         f"[상품명]: {p_name}\n[할인 가격]: {p_price_str}\n\n"
         "[필수 집필 지침]\n"
-        "1. [자연스러운 호흡]: 문장은 독백하듯 자연스러운 구어체로 작성하되 단락 내 인위적인 줄바꿈(\\n)을 억지로 치지 마라. 문장 완결 온점(.)을 정확히 찍어라.\n"
-        "2. [제목]: '상품명 + 핵심 키워드(내돈내산 솔직 후기, 장단점, 가격 비교)' 조합으로 클릭률 높게 작성.\n"
-        "3. [도입부(hook_intro)]: 공백 포함 450자 이상. 구매 전 소비자가 겪는 진짜 고민에 깊이 공감하며 시작할 것.\n"
-        "4. [스펙 비교표(spec_table)]: 마크다운 표 문법(|구분|상세 스펙|)을 사용해 주요 스펙을 4행 이상 명쾌하게 정리할 것.\n"
-        "5. [장단점 본문(pros_cons_body)]: 공백 포함 700자 이상. 장점 3가지와 '치명적인 단점 1가지'를 솔직하게 작성해 신뢰도를 극대화하라.\n"
-        "6. [구매 추천 대상(verdict)]: 공백 포함 300자 이상 요약.\n"
-        "7. [카드 요약(card_bullets)]: 핵심 장점 딱 3문장(각 15자 이내) 배열 출력.\n"
-        "8. [태그(tags)]: 상품과 직결되는 핵심 키워드 딱 3~4개만 배열 출력.\n"
-        "9. [퍼머링크(slug)]: 영어 소문자 단어 2~3개 하이픈 연결.\n"
-        "10. [금지어]: '파소나', 'PASONA', '카피라이팅', 'AI', '인공지능', '자동화', '프로그램'.\n\n"
+        "1. [인사말 절대 금지]: '안녕하세요 여러분', '구독자님들', '오늘 소개할 제품은~' 같은 오글거리는 블로거 인사말을 서론에 단 한 글자도 쓰지 마라. 첫 문장부터 소비자가 겪는 현실적 페인포인트를 짚으며 본론으로 진입하라.\n"
+        "2. [담백한 어조]: 인위적인 억지 공감(~했던 경험 다들 있으시죠?) 대신 객관적 스펙과 실사용 팩트 기반의 분석 톤을 유지하라.\n"
+        "3. [제목]: '상품명 + 핵심 키워드(내돈내산 솔직 후기, 장단점, 가격 비교)' 조합으로 클릭률 높게 작성.\n"
+        "4. [도입부(hook_intro)]: 공백 포함 450자 이상 상세 집필.\n"
+        "5. [스펙 비교표(spec_table)]: 마크다운 표 문법(|구분|상세 스펙|) 주요 스펙 4행 이상 정리.\n"
+        "6. [장단점 본문(pros_cons_body)]: 공백 포함 700자 이상. 장점 3가지와 '구매 전 알아야 할 주의점 1가지' 솔직 작성.\n"
+        "7. [구매 추천 대상(verdict)]: 공백 포함 300자 이상 요약.\n"
+        "8. [카드 요약(card_bullets)]: 핵심 장점 딱 3문장(각 15자 이내) 배열 출력.\n"
+        "9. [태그(tags)]: 상품과 직결되는 핵심 키워드 딱 3~4개 배열 출력.\n"
+        "10. [퍼머링크(slug)]: 영어 소문자 단어 2~3개 하이픈 연결.\n"
+        "11. [금지어]: '파소나', 'PASONA', '카피라이팅', 'AI', '인공지능', '자동화', '프로그램'.\n\n"
         "반드시 아래 JSON 규격만 출력하라.\n"
         "{\n"
         '  "title": "에어팟 프로 2세대 내돈내산 솔직 후기",\n'
@@ -291,18 +304,17 @@ def main():
 
     title, raw_slug, tags = ai_data['title'], ai_data['slug'], ai_data['tags'][:4]
     slug = re.sub(r'[^a-z0-9\-]', '', raw_slug.lower()).strip('-') or "best-coupang-item"
-    card_cdn_url = bake_pil_summary_card(p_name, p_price_str, hero_cdn_img, ai_data['card_bullets'])
+
+    # ★ 3중 방어 이미지 추출 실행
+    best_img_url, is_card = get_bulletproof_image_url(img_url, p_name, p_price_str, ai_data.get('card_bullets', []))
 
     def generate_adsense_html():
         return f'<div class="adsense-container" style="margin:30px auto; text-align:center;"><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={GOOGLE_ADSENSE_CLIENT}" crossorigin="anonymous"></script><ins class="adsbygoogle" style="display:block" data-ad-client="{GOOGLE_ADSENSE_CLIENT}" data-ad-slot="{GOOGLE_ADSENSE_SLOT}" data-ad-format="auto" data-full-width-responsive="true"></ins><script>(adsbygoogle = window.adsbygoogle || []).push({{}});</script></div>'
 
     cta_btn = f'<div style="margin:40px 0;"><a href="{link_url}" target="_blank" style="background-color:#E52528; color:#FFFFFF; font-size:17px; font-weight:bold; padding:18px 30px; text-decoration:none; border-radius:10px; display:inline-block; box-shadow:0 6px 16px rgba(229,37,40,0.25);">🚀 실시간 최저가 및 로켓배송 가능 여부 확인하기</a></div>'
 
-    if card_cdn_url:
-        hero_html = f'<div style="margin:35px 0;"><a href="{link_url}" target="_blank"><img src="{card_cdn_url}" alt="{title}" style="max-width:92%; border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,0.08);"/></a><p style="font-size:12px; color:#94a3b8; margin-top:8px;">👆 이미지를 터치하면 실시간 최저가 페이지로 이동합니다</p></div>'
-    elif hero_cdn_img:
-        hero_html = f'<div style="margin:35px 0;"><a href="{link_url}" target="_blank"><img src="{hero_cdn_img}" alt="{title}" style="max-width:85%; border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,0.08);"/></a></div>'
-    else: hero_html = ""
+    sub_txt = "👆 이미지를 터치하면 실시간 최저가 페이지로 이동합니다" if is_card else "👆 사진을 터치하면 로켓배송 확인 페이지로 이동합니다"
+    hero_html = f'<div style="margin:35px 0;"><a href="{link_url}" target="_blank"><img src="{best_img_url}" alt="{title}" style="max-width:90%; border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,0.08);"/></a><p style="font-size:12px; color:#94a3b8; margin-top:8px;">{sub_txt}</p></div>'
 
     ftc_msg = "<p style='color:#94a3b8; font-size:12px; margin-bottom:25px;'>💡 이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>"
     h3_style = 'font-size: 20px; font-weight: bold; color: #1e293b; margin: 45px 0 22px 0; display: inline-block; border-bottom: 2px solid #E52528; padding-bottom: 6px;'
@@ -323,12 +335,7 @@ def main():
         print(f"🔗 [1연타] 예약 대기열에 영어 주소 방 생성 중... (/{slug}.html)")
         res_ins = blogger_service.posts().insert(
             blogId=BLOG_ID, 
-            body={
-                'title': slug, 
-                'content': final_html, 
-                'labels': tags,
-                'published': scheduled_iso 
-            }, 
+            body={'title': slug, 'content': final_html, 'labels': tags, 'published': scheduled_iso}, 
             isDraft=False
         ).execute()
         pid = res_ins.get('id')
