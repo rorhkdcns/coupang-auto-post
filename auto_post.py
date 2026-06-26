@@ -182,51 +182,51 @@ def get_bulletproof_image_url(raw_coupang_url, prod_name, price_str, bullets):
     print("⚠️ [로컬 환경 감지] 깃허브 업로드를 생략하고 실시간 이미지 우회 링크로 대체 송출합니다.")
     return weserv_proxy, False
 
-# 1. format_paragraphs 함수를 아래 내용으로 완전 교체
+# (위쪽 import 및 설정 로직은 기존과 동일)
+
 def format_paragraphs(text):
     if not text or not text.strip(): return ""
     
-    # 텍스트 내의 '첫째.', '둘째.', '1.', '2.' 등 리스트 형식을 줄바꿈 후 좌측 정렬로 분리하기 위한 정규식
-    text = re.sub(r'(?<!\n)\n?(첫째|둘째|셋째|넷째|1\.|2\.|3\.|4\.)', r'\n\n\1', text)
+    # [핵심] **키워드**를 빨간 볼드로 치환
     text = re.sub(r'\*\*(.*?)\*\*', r'<span style="color:#E52528; font-weight:bold;">\1</span>', text)
     
     chunks = []
-    lines = text.split('\n')
+    # 문장 단위로 쪼개기
+    paragraphs = text.split('\n')
     
-    for line in lines:
-        line = line.strip()
-        if not line: continue
+    for p in paragraphs:
+        p = p.strip()
+        if not p: continue
         
-        # 표 파싱
-        if line.startswith('|'):
-            chunks.append(f'<div style="margin: 20px auto; overflow-x: auto; width: 100%; text-align: left;"><table style="border-collapse: collapse; width: 100%; border: 1px solid #cbd5e1; background: #fff;">')
-            # 표 내부 데이터는 표 자체 태그로 처리
-            pass 
-        # 리스트 형태는 좌측 정렬로 별도 처리
-        elif re.match(r'^(첫째|둘째|셋째|넷째|1\.|2\.|3\.|4\.)', line):
-            chunks.append(f'<p style="font-size:16px; line-height:1.8; margin-bottom:10px; color:#333; text-align:left; padding-left: 20px;">{line}</p>')
+        # 표 처리
+        if p.startswith('|'):
+            chunks.append(f'<div style="margin: 30px auto; overflow-x: auto; width: 90%;"><table style="border-collapse: collapse; width: 100%; margin: 0 auto; text-align: center; border: 1px solid #cbd5e1;">')
+            # (이하 표 로직 동일)
         else:
-            chunks.append(f'<p style="font-size:16px; line-height:2.0; margin-bottom:25px; color:#222; text-align:center;">{line}</p>')
-            
+            # [핵심] 일반 본문은 가운데 정렬 + 줄바꿈 유지
+            chunks.append(f'<p style="text-align: center; font-size: 16px; line-height: 1.9; margin-bottom: 25px; color: #333;">{p}</p>')
+    
     return "".join(chunks)
 
-# 2. AI 프롬프트도 아래 내용으로 업데이트 (줄바꿈 강조)
-    prompt = (
-        "너는 스마트한 쇼핑 에디터야. 아래 상품을 분석해줘.\n\n"
-        "[필수 집필 지침]\n"
-        "1. [가독성 강화]: 모든 문단은 문장이 끝나면 반드시 줄바꿈을 하여 독립된 문단으로 만들어라. 절대 문장을 길게 이어 쓰지 마라.\n"
-        "2. [리스트 정렬]: '첫째.', '둘째.'와 같은 리스트 항목은 반드시 줄바꿈을 한 후 새로운 줄에서 시작해라. 중간에 섞지 마라.\n"
-        "3. [시각적 구분]: 표(Table)는 가급적 사용하되, 표가 없을 때는 글머리 기호(•)를 사용해라.\n"
-        "4. [제목 및 분량]: 제목은 매력적으로, 각 섹션은 최소 300자 이상 상세하게 작성해라.\n"
-        "반드시 JSON 규격만 출력하라.\n"
-        "{\n"
-        '  "title": "상품 제목",\n'
-        '  "hook_intro": "첫째, 둘째가 자연스럽게 분리된 도입부",\n'
-        '  "spec_table": "|구분|내용| 표 내용",\n'
-        '  "pros_cons_body": "장단점 본문",\n'
-        '  "verdict": "추천 대상"\n'
-        "}"
-    )
+# 메인 함수 내의 조립부 수정
+    # [가독성 강화] 불필요한 줄바꿈을 제거하고, CSS로 간격 조절
+    final_html = f'''
+    <div style="text-align: center; max-width: 650px; margin: 0 auto; font-family: sans-serif;">
+        {ftc_msg}
+        {generate_adsense_html()}
+        <div style="text-align: center;">{format_paragraphs(ai_data['hook_intro'])}</div>
+        {hero_html}
+        {cta_btn}
+        <h3 style="text-align: center; font-size: 20px; font-weight: bold; border-bottom: 2px solid #E52528; display: inline-block; padding-bottom: 5px; margin: 40px 0;">💡 주요 스펙 한눈에 보기</h3>
+        <div style="text-align: center;">{format_paragraphs(ai_data['spec_table'])}</div>
+        <h3 style="text-align: center; font-size: 20px; font-weight: bold; border-bottom: 2px solid #E52528; display: inline-block; padding-bottom: 5px; margin: 40px 0;">🔍 솔직한 장단점 분석</h3>
+        <div style="text-align: center;">{format_paragraphs(ai_data['pros_cons_body'])}</div>
+        <h3 style="text-align: center; font-size: 20px; font-weight: bold; border-bottom: 2px solid #E52528; display: inline-block; padding-bottom: 5px; margin: 40px 0;">🎯 총평</h3>
+        <div style="text-align: center;">{format_paragraphs(ai_data['verdict'])}</div>
+        {cta_btn}
+        {ftc_msg}
+        {generate_adsense_html()}
+    </div>
 
 def main():
     print("🔄 [쿠팡 파트너스 API V2] 정석 포스팅 공장을 가동합니다.")
