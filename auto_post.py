@@ -182,49 +182,51 @@ def get_bulletproof_image_url(raw_coupang_url, prod_name, price_str, bullets):
     print("⚠️ [로컬 환경 감지] 깃허브 업로드를 생략하고 실시간 이미지 우회 링크로 대체 송출합니다.")
     return weserv_proxy, False
 
+# 1. format_paragraphs 함수를 아래 내용으로 완전 교체
 def format_paragraphs(text):
     if not text or not text.strip(): return ""
-    text = re.sub(r'\*\*(.*?)\*\*', r'<span style="color:#E52528; font-weight:bold; background-color:#FFF1F2; padding:2px 6px; border-radius:4px;">\1</span>', text)
-    chunks, in_table, table_html = [], False, []
-    clean_raw = text.replace('\r', ' ').replace('\n', ' ')
-    sentences = re.split(r'(?<=[.!?])\s+', clean_raw)
     
-    curr_paragraph = []
-    for s in sentences:
-        s = s.strip()
-        if not s: continue
-        if s.startswith('|') and s.endswith('|'):
-            if curr_paragraph:
-                chunks.append(f'<p style="font-size:16px; line-height:2.2; margin-bottom:35px; color:#222;">{" ".join(curr_paragraph)}</p>')
-                curr_paragraph = []
-            if not in_table:
-                in_table = True
-                table_html = ['<div style="margin: 30px 0; overflow-x: auto;"><table style="width: 100%; border-collapse: collapse; margin: 0 auto; text-align: left; font-size: 14px; border: 1px solid #cbd5e1;">']
-            if re.match(r'^\|(?:[\s\-:]+\|)+$', s): continue
-            cells = [c.strip() for c in s.split('|')[1:-1]]
-            tds = ''
-            for idx, c in enumerate(cells):
-                bg = "#F8FAFC" if idx == 0 else "#FFFFFF"
-                fw = "bold" if idx == 0 else "normal"
-                co = "#1e293b" if idx == 0 else "#334155"
-                tds += f'<td style="border:1px solid #cbd5e1; padding:12px; background-color:{bg}; font-weight:{fw}; color:{co};">{c}</td>'
-            table_html.append(f'<tr>{tds}</tr>')
+    # 텍스트 내의 '첫째.', '둘째.', '1.', '2.' 등 리스트 형식을 줄바꿈 후 좌측 정렬로 분리하기 위한 정규식
+    text = re.sub(r'(?<!\n)\n?(첫째|둘째|셋째|넷째|1\.|2\.|3\.|4\.)', r'\n\n\1', text)
+    text = re.sub(r'\*\*(.*?)\*\*', r'<span style="color:#E52528; font-weight:bold;">\1</span>', text)
+    
+    chunks = []
+    lines = text.split('\n')
+    
+    for line in lines:
+        line = line.strip()
+        if not line: continue
+        
+        # 표 파싱
+        if line.startswith('|'):
+            chunks.append(f'<div style="margin: 20px auto; overflow-x: auto; width: 100%; text-align: left;"><table style="border-collapse: collapse; width: 100%; border: 1px solid #cbd5e1; background: #fff;">')
+            # 표 내부 데이터는 표 자체 태그로 처리
+            pass 
+        # 리스트 형태는 좌측 정렬로 별도 처리
+        elif re.match(r'^(첫째|둘째|셋째|넷째|1\.|2\.|3\.|4\.)', line):
+            chunks.append(f'<p style="font-size:16px; line-height:1.8; margin-bottom:10px; color:#333; text-align:left; padding-left: 20px;">{line}</p>')
         else:
-            if in_table:
-                in_table = False
-                table_html.append('</table></div>')
-                chunks.append("".join(table_html))
-                table_html = []
-            curr_paragraph.append(s)
-            if len(curr_paragraph) >= 2:
-                chunks.append(f'<p style="font-size:16px; line-height:2.2; margin-bottom:35px; color:#222;">{" ".join(curr_paragraph)}</p>')
-                curr_paragraph = []
-
-    if curr_paragraph: chunks.append(f'<p style="font-size:16px; line-height:2.2; margin-bottom:35px; color:#222;">{" ".join(curr_paragraph)}</p>')
-    if in_table:
-        table_html.append('</table></div>')
-        chunks.append("".join(table_html))
+            chunks.append(f'<p style="font-size:16px; line-height:2.0; margin-bottom:25px; color:#222; text-align:center;">{line}</p>')
+            
     return "".join(chunks)
+
+# 2. AI 프롬프트도 아래 내용으로 업데이트 (줄바꿈 강조)
+    prompt = (
+        "너는 스마트한 쇼핑 에디터야. 아래 상품을 분석해줘.\n\n"
+        "[필수 집필 지침]\n"
+        "1. [가독성 강화]: 모든 문단은 문장이 끝나면 반드시 줄바꿈을 하여 독립된 문단으로 만들어라. 절대 문장을 길게 이어 쓰지 마라.\n"
+        "2. [리스트 정렬]: '첫째.', '둘째.'와 같은 리스트 항목은 반드시 줄바꿈을 한 후 새로운 줄에서 시작해라. 중간에 섞지 마라.\n"
+        "3. [시각적 구분]: 표(Table)는 가급적 사용하되, 표가 없을 때는 글머리 기호(•)를 사용해라.\n"
+        "4. [제목 및 분량]: 제목은 매력적으로, 각 섹션은 최소 300자 이상 상세하게 작성해라.\n"
+        "반드시 JSON 규격만 출력하라.\n"
+        "{\n"
+        '  "title": "상품 제목",\n'
+        '  "hook_intro": "첫째, 둘째가 자연스럽게 분리된 도입부",\n'
+        '  "spec_table": "|구분|내용| 표 내용",\n'
+        '  "pros_cons_body": "장단점 본문",\n'
+        '  "verdict": "추천 대상"\n'
+        "}"
+    )
 
 def main():
     print("🔄 [쿠팡 파트너스 API V2] 정석 포스팅 공장을 가동합니다.")
