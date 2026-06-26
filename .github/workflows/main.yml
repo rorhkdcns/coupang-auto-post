@@ -1,30 +1,30 @@
 name: Coupang Auto Blogger CI
 
+# ★★★ 이미지 업로드(GitHub 쓰기) 권한 - 이거 없으면 이미지 안 나옴! ★★★
+permissions:
+  contents: write
+
 on:
   workflow_dispatch: # 👈 수동 실행 버튼 유지
   schedule:
     # 💡 UTC 기준 1시, 5시, 9시 = 한국 시간(KST) 오전 10시, 오후 2시, 오후 6시
     - cron: '0 1,5,9 * * *'
-
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
     - name: Checkout repository code
       uses: actions/checkout@v4
-
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.12'
-
     # 📦 파이썬이 구글 블로그와 제미나이를 주무를 수 있게 도구를 미리 깔아줍니다!
+    # ★ Pillow 추가 (카드 이미지 생성용)
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install requests google-auth-oauthlib google-auth-httplib2 google-api-python-client google-genai
-
+        pip install requests google-auth-oauthlib google-auth-httplib2 google-api-python-client google-genai Pillow
     # 🔍 시크릿 변수가 정상적으로 로드되는지 사전 검증
     - name: Verify Secrets Integrity
       env:
@@ -41,9 +41,10 @@ jobs:
         else
           echo "✅ COUPANG_SECRET_KEY 연결 확인 완료"
         fi
-
     - name: Run Auto Post Script
       env:
+        # ★★★ GITHUB_TOKEN 추가 - 이미지 업로드의 핵심! ★★★
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         API_KEY: ${{ secrets.API_KEY }}
         TOKEN_PICKLE_BASE64: ${{ secrets.TOKEN_PICKLE_BASE64 }}
         COUPANG_ACCESS_KEY: ${{ secrets.COUPANG_ACCESS_KEY }}
