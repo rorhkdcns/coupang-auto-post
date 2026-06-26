@@ -94,9 +94,44 @@ def check_already_posted(blogger, blog_id):
     return False
 
 # =====================================================================
-# 🎨 PIL 스펙 카드 굽기 (쿠팡 403 차단 회피 프록시 엔진 탑재)
+# 📦 이미지 안전 스크래핑 및 깃허브 영구 박제 모듈 (엑스박스 원천 차단)
 # =====================================================================
-def bake_pil_summary_card(prod_name, price_str, raw_img_url, bullet_points):
+def download_and_upload_image_to_github(raw_img_url, prefix="prod"):
+    gh_token = os.environ.get("GITHUB_TOKEN")
+    if not gh_token or not raw_img_url: return ""
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Referer": "https://www.coupang.com/"
+    }
+
+    try:
+        res = requests.get(raw_img_url, headers=headers, timeout=10)
+        if res.status_code != 200: return ""
+        
+        img = Image.open(io.BytesIO(res.content)).convert('RGB')
+        img.thumbnail((600, 600), Image.Resampling.LANCZOS)
+        
+        file_name = f"{prefix}_{int(time.time())}_{random.randint(100,999)}.webp"
+        buffer = io.BytesIO()
+        img.save(buffer, format="WEBP", quality=85)
+        encoded_img = base64.b64encode(buffer.getvalue()).decode("utf-8")
+
+        git_path = f"blog_images/coupang/{file_name}"
+        url = f"https://api.github.com/repos/{GITHUB_USER_ID}/{GITHUB_REPO_NAME}/contents/{git_path}"
+        gh_headers = {"Authorization": f"Bearer {gh_token}", "Accept": "application/vnd.github.v3+json"}
+
+        res_put = requests.put(url, headers=gh_headers, json={"message": f"Upload image: {file_name}", "content": encoded_img, "branch": "main"}, timeout=10)
+        if res_put.status_code in [200, 201]:
+            print(f"🎨 이미지 깃허브 박제 성공: {file_name}")
+            return f"https://cdn.jsdelivr.net/gh/{GITHUB_USER_ID}/{GITHUB_REPO_NAME}@main/{git_path}"
+    except Exception as e: print(f"⚠️ 이미지 다운/업로드 에러: {e}")
+    return ""
+
+# =====================================================================
+# 🎨 PIL 스펙 카드 굽기 (안전 박제된 이미지 활용)
+# =====================================================================
+def bake_pil_summary_card(prod_name, price_str, cdn_img_url, bullet_points):
     gh_token = os.environ.get("GITHUB_TOKEN")
     if not gh_token: return ""
 
@@ -116,18 +151,15 @@ def bake_pil_summary_card(prod_name, price_str, raw_img_url, bullet_points):
     except:
         title_font = price_font = bullet_font = badge_font = ImageFont.load_default()
 
-    # ★ 핵심 치트키: 쿠팡 CDN 403 차단을 뚫는 weserv 이미지 프록시 우회 전송
-    try:
-        clean_target = re.sub(r'^https?://', '', raw_img_url)
-        proxy_url = f"https://images.weserv.nl/?url={urllib.parse.quote(clean_target)}"
-        res_img = requests.get(proxy_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
-        p_img = Image.open(io.BytesIO(res_img.content)).convert('RGBA')
-        p_img.thumbnail((350, 350), Image.Resampling.LANCZOS)
-        
-        bg = Image.new('RGBA', p_img.size, (255, 255, 255))
-        composite = Image.alpha_composite(bg, p_img).convert('RGB')
-        card.paste(composite, ((800 - composite.width) // 2, 70))
-    except Exception as e: print(f"⚠️ 프록시 이미지 로드 실패 대체 렌더링: {e}")
+    if cdn_img_url:
+        try:
+            res_img = requests.get(cdn_img_url, timeout=5)
+            p_img = Image.open(io.BytesIO(res_img.content)).convert('RGBA')
+            p_img.thumbnail((350, 350), Image.Resampling.LANCZOS)
+            bg = Image.new('RGBA', p_img.size, (255, 255, 255))
+            composite = Image.alpha_composite(bg, p_img).convert('RGB')
+            card.paste(composite, ((800 - composite.width) // 2, 70))
+        except Exception as e: print(f"⚠️ 카드 합성 대체 렌더링: {e}")
 
     draw.rounded_rectangle([330, 440, 470, 475], radius=6, fill='#E52528')
     draw.text((400, 457), "COUPANG PICK", fill='#FFFFFF', font=badge_font, anchor="mm")
@@ -157,24 +189,35 @@ def bake_pil_summary_card(prod_name, price_str, raw_img_url, bullet_points):
     return ""
 
 # =====================================================================
-# ✍️ 한국형 블로그 레이아웃 파싱 (가운데 정렬 + 시원한 줄바꿈)
+# ✍️ 문장 완결성(`.`, `!`) 감지 정밀 파싱 (상하간격 2줄 확보)
 # =====================================================================
 def format_paragraphs(text):
     if not text or not text.strip(): return ""
+    
+    # 볼드체 변환
     text = re.sub(r'\*\*(.*?)\*\*', r'<span style="color:#E52528; font-weight:bold; background-color:#FFF1F2; padding:2px 6px; border-radius:4px;">\1</span>', text)
     
     chunks, in_table, table_html = [], False, []
-    paragraphs = [p.strip() for p in text.split('\n') if p.strip()]
     
-    for p in paragraphs:
-        if p.startswith('|') and p.endswith('|'):
+    # 인위적인 줄바꿈을 싹 지우고 온점(.), 느낌표(!), 물음표(?) 기준으로 문장을 정밀 분리
+    clean_raw = text.replace('\r', ' ').replace('\n', ' ')
+    sentences = re.split(r'(?<=[.!?])\s+', clean_raw)
+    
+    curr_paragraph = []
+    for s in sentences:
+        s = s.strip()
+        if not s: continue
+        
+        if s.startswith('|') and s.endswith('|'):
+            if curr_paragraph:
+                chunks.append(f'<p style="font-size: 16px; line-height: 2.2; margin-bottom: 35px; color: #222222;">{" ".join(curr_paragraph)}</p>')
+                curr_paragraph = []
             if not in_table:
                 in_table = True
-                # 표는 가운데 정렬 상속받으면 글씨가 찌그러지므로 좌측 정렬 고정
                 table_html = ['<div style="margin: 30px 0; overflow-x: auto;"><table style="width: 100%; border-collapse: collapse; margin: 0 auto; text-align: left; font-size: 14px; border: 1px solid #cbd5e1;">']
-            if re.match(r'^\|(?:[\s\-:]+\|)+$', p): continue
+            if re.match(r'^\|(?:[\s\-:]+\|)+$', s): continue
             
-            cells = [c.strip() for c in p.split('|')[1:-1]]
+            cells = [c.strip() for c in s.split('|')[1:-1]]
             tds = ''
             for idx, c in enumerate(cells):
                 bg = "#F8FAFC" if idx == 0 else "#FFFFFF"
@@ -189,9 +232,14 @@ def format_paragraphs(text):
                 chunks.append("".join(table_html))
                 table_html = []
             
-            # 일반 블로그 본문 가독성 스타일 (가운데 정렬에 어울리는 행간)
-            chunks.append(f'<p style="font-size: 16px; line-height: 2.1; margin-bottom: 26px; color: #222222; word-break: keep-all;">{p}</p>')
-            
+            curr_paragraph.append(s)
+            # 문장 2개가 쌓이거나 마지막 문장일 때 하나의 <p> 묶음으로 생성 (상하 여백 35px = 2줄 간격 효과)
+            if len(curr_paragraph) >= 2:
+                chunks.append(f'<p style="font-size: 16px; line-height: 2.2; margin-bottom: 35px; color: #222222;">{" ".join(curr_paragraph)}</p>')
+                curr_paragraph = []
+
+    if curr_paragraph:
+        chunks.append(f'<p style="font-size: 16px; line-height: 2.2; margin-bottom: 35px; color: #222222;">{" ".join(curr_paragraph)}</p>')
     if in_table:
         table_html.append('</table></div>')
         chunks.append("".join(table_html))
@@ -227,25 +275,26 @@ def main():
 
     print(f"🛒 오늘의 집중 분석 주인공 선정 완료: {p_name}")
 
+    # ★ 엑스박스 원천 차단: 쿠팡 원본 사진을 내 깃허브 CDN에 영구 박제 다운로드
+    hero_cdn_img = download_and_upload_image_to_github(img_url, prefix="hero")
+
     ai_client = genai.Client(api_key=gemini_key)
     
-    # ★ 가독성 핵심: AI에게 '짧은 호흡의 가운데 정렬 문장' 강제 집필 명령
     prompt = (
         "너는 구독자 10만 명의 '네이버 인플루언서 테크/리뷰 블로거'야. "
         "아래 상품에 대해 스마트폰에서 가독성 좋게 정독되는 집중 분석 칼럼을 작성해줘.\n\n"
         f"[상품명]: {p_name}\n[할인 가격]: {p_price_str}\n\n"
-        "[필수 집필 지침 - 모바일 가독성 혁명]\n"
-        "1. [호흡 짧은 문장]: 모바일 '가운데 정렬' 화면에서 예쁘게 읽히도록 한 문장의 길이는 공백 포함 25자 내외로 호흡을 아주 짧게 끊어라. 접속사는 과감히 삭제하라.\n"
-        "2. [강제 문단 쪼개기]: 벽돌처럼 빽빽한 글은 독자가 바로 이탈한다. 본문 작성 시 무조건 문장 2개를 쓸 때마다 줄바꿈(\\n)을 2번 넣어 문단을 아주 잘게 쪼개라.\n"
-        "3. [제목]: '상품명 + 핵심 키워드(내돈내산 솔직 후기, 장단점, 가격 비교)' 조합으로 클릭률 높게 작성.\n"
-        "4. [도입부(hook_intro)]: 공백 포함 450자 이상. 이 상품을 구매하기 전 소비자가 겪는 진짜 고민에 깊이 공감하며 시작할 것.\n"
-        "5. [스펙 비교표(spec_table)]: 마크다운 표 문법(|구분|상세 스펙|)을 사용해 주요 스펙을 4행 이상 명쾌하게 정리할 것.\n"
-        "6. [장단점 본문(pros_cons_body)]: 공백 포함 700자 이상. 장점 3가지와 '구매 전 반드시 알아야 할 치명적인 단점 1가지'를 솔직하게 작성해 신뢰도를 극대화하라.\n"
-        "7. [구매 추천 대상(verdict)]: 공백 포함 300자 이상. '이런 분들께는 강력 추천 / 이런 분들은 사지 마세요' 요약.\n"
-        "8. [카드 요약(card_bullets)]: 인포그래픽 카드에 인쇄할 핵심 장점 딱 3문장(각 15자 이내) 배열 출력.\n"
-        "9. [태그(tags)]: 상품과 직결되는 핵심 키워드 딱 3~4개만 배열 출력.\n"
-        "10. [퍼머링크(slug)]: 영어 소문자 단어 2~3개 하이픈 연결.\n"
-        "11. [금지어]: '파소나', 'PASONA', '카피라이팅', 'AI', '인공지능', '자동화', '프로그램'.\n\n"
+        "[필수 집필 지침]\n"
+        "1. [자연스러운 호흡]: 문장은 독백하듯 자연스러운 구어체로 작성하되 단락 내 인위적인 줄바꿈(\\n)을 억지로 치지 마라. 문장 완결 온점(.)을 정확히 찍어라.\n"
+        "2. [제목]: '상품명 + 핵심 키워드(내돈내산 솔직 후기, 장단점, 가격 비교)' 조합으로 클릭률 높게 작성.\n"
+        "3. [도입부(hook_intro)]: 공백 포함 450자 이상. 이 상품을 구매하기 전 소비자가 겪는 진짜 고민에 깊이 공감하며 시작할 것.\n"
+        "4. [스펙 비교표(spec_table)]: 마크다운 표 문법(|구분|상세 스펙|)을 사용해 주요 스펙을 4행 이상 명쾌하게 정리할 것.\n"
+        "5. [장단점 본문(pros_cons_body)]: 공백 포함 700자 이상. 장점 3가지와 '구매 전 반드시 알아야 할 치명적인 단점 1가지'를 솔직하게 작성해 신뢰도를 극대화하라.\n"
+        "6. [구매 추천 대상(verdict)]: 공백 포함 300자 이상. '이런 분들께는 강력 추천 / 이런 분들은 사지 마세요' 요약.\n"
+        "7. [카드 요약(card_bullets)]: 인포그래픽 카드에 인쇄할 핵심 장점 딱 3문장(각 15자 이내) 배열 출력.\n"
+        "8. [태그(tags)]: 상품과 직결되는 핵심 키워드 딱 3~4개만 배열 출력.\n"
+        "9. [퍼머링크(slug)]: 영어 소문자 단어 2~3개 하이픈 연결.\n"
+        "10. [금지어]: '파소나', 'PASONA', '카피라이팅', 'AI', '인공지능', '자동화', '프로그램'.\n\n"
         "반드시 아래 JSON 규격만 출력하라.\n"
         "{\n"
         '  "title": "에어팟 프로 2세대 내돈내산 솔직 후기 및 장단점",\n'
@@ -276,26 +325,24 @@ def main():
     title, raw_slug, tags = ai_data['title'], ai_data['slug'], ai_data['tags'][:4]
     slug = re.sub(r'[^a-z0-9\-]', '', raw_slug.lower()).strip('-') or "best-coupang-item"
 
-    card_cdn_url = bake_pil_summary_card(p_name, p_price_str, img_url, ai_data['card_bullets'])
+    # PIL 카드 제작 (박제된 깃허브 사진을 소스로 사용하므로 100% 안전)
+    card_cdn_url = bake_pil_summary_card(p_name, p_price_str, hero_cdn_img, ai_data['card_bullets'])
 
     def generate_adsense_html():
         return f'<div class="adsense-container" style="margin:30px auto; text-align:center;"><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={GOOGLE_ADSENSE_CLIENT}" crossorigin="anonymous"></script><ins class="adsbygoogle" style="display:block" data-ad-client="{GOOGLE_ADSENSE_CLIENT}" data-ad-slot="{GOOGLE_ADSENSE_SLOT}" data-ad-format="auto" data-full-width-responsive="true"></ins><script>(adsbygoogle = window.adsbygoogle || []).push({{}});</script></div>'
 
-    cta_btn = f'<div style="margin:35px 0;"><a href="{link_url}" target="_blank" style="background-color:#E52528; color:#FFFFFF; font-size:17px; font-weight:bold; padding:16px 28px; text-decoration:none; border-radius:10px; display:inline-block; box-shadow:0 4px 14px rgba(229,37,40,0.3);">🚀 실시간 최저가 및 로켓배송 가능 여부 확인하기</a></div>'
-
-    # ★ 2중 안전장치: PIL 카드가 혹시 실패하더라도 우회 프록시 원본 상품 사진이 메인에 무조건 뜨도록 보장
-    clean_proxy_target = re.sub(r'^https?://', '', img_url)
-    fallback_proxy_img = f"https://images.weserv.nl/?url={urllib.parse.quote(clean_proxy_target)}"
+    cta_btn = f'<div style="margin:40px 0;"><a href="{link_url}" target="_blank" style="background-color:#E52528; color:#FFFFFF; font-size:17px; font-weight:bold; padding:18px 30px; text-decoration:none; border-radius:10px; display:inline-block; box-shadow:0 6px 16px rgba(229,37,40,0.25);">🚀 실시간 최저가 및 로켓배송 가능 여부 확인하기</a></div>'
 
     if card_cdn_url:
-        hero_html = f'<div style="margin:30px 0;"><a href="{link_url}" target="_blank"><img src="{card_cdn_url}" alt="{title}" style="max-width:92%; border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,0.08);"/></a><p style="font-size:12px; color:#94a3b8; margin-top:8px;">👆 이미지를 터치하면 실시간 최저가 페이지로 이동합니다</p></div>'
+        hero_html = f'<div style="margin:35px 0;"><a href="{link_url}" target="_blank"><img src="{card_cdn_url}" alt="{title}" style="max-width:92%; border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,0.08);"/></a><p style="font-size:12px; color:#94a3b8; margin-top:8px;">👆 이미지를 터치하면 실시간 최저가 페이지로 이동합니다</p></div>'
+    elif hero_cdn_img:
+        hero_html = f'<div style="margin:35px 0;"><a href="{link_url}" target="_blank"><img src="{hero_cdn_img}" alt="{title}" style="max-width:85%; border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,0.08);"/></a></div>'
     else:
-        hero_html = f'<div style="margin:30px 0;"><a href="{link_url}" target="_blank"><img src="{fallback_proxy_img}" alt="{title}" style="max-width:80%; border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,0.08);"/></a></div>'
+        hero_html = ""
 
     ftc_msg = "<p style='color:#94a3b8; font-size:12px; margin-bottom:25px;'>💡 이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>"
 
-    # 소제목 스타일(가운데 정렬 + 인라인 밑줄)
-    h3_style = 'font-size: 20px; font-weight: bold; color: #1e293b; margin: 45px 0 20px 0; display: inline-block; border-bottom: 2px solid #E52528; padding-bottom: 6px;'
+    h3_style = 'font-size: 20px; font-weight: bold; color: #1e293b; margin: 45px 0 22px 0; display: inline-block; border-bottom: 2px solid #E52528; padding-bottom: 6px;'
 
     inner_content = ftc_msg + generate_adsense_html() + \
                     format_paragraphs(ai_data['hook_intro']) + \
@@ -305,7 +352,6 @@ def main():
                     f'<h3 style="{h3_style}">🎯 총평: 이런 분들께 추천합니다</h3>' + format_paragraphs(ai_data['verdict']) + \
                     cta_btn + generate_adsense_html()
 
-    # ★ 네이버 블로그 레이아웃 래퍼: 전체 글 가운데 정렬 + 모바일 규격 폭 고정
     final_html = f'<div style="max-width: 660px; margin: 0 auto; text-align: center; word-break: keep-all; font-family: -apple-system, BlinkMacSystemFont, Pretendard, Roboto, sans-serif; color: #222222;">{inner_content}</div>'
 
     publish_time = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
@@ -317,14 +363,14 @@ def main():
         pid = res_ins.get('id')
 
         time.sleep(1.5)
-        print(f"✍️ [2연타] 한글 정식 제목('{title}') 덮어쓰기 중...")
+        print(f"✍️ [2연타] 한글 정식 제목('{title}') 안전 박제 중...")
         blogger_service.posts().patch(blogId=BLOG_ID, postId=pid, body={'title': title, 'content': final_html, 'labels': tags}).execute()
 
         time.sleep(1.0)
         print(f"⏰ [3연타] 내일 시각({scheduled_iso})으로 예약 유배 중...")
         blogger_service.posts().patch(blogId=BLOG_ID, postId=pid, body={'published': scheduled_iso}).execute()
 
-        print("🚀 쿠팡 파트너스 정석 포스팅 한국형 레이아웃 발행 성공!")
+        print("🚀 쿠팡 파트너스 정석 포스팅 한국형 완벽 규격 발행 성공!")
     except Exception as e: print(f"❌ 최종 발행 에러: {e}")
 
 if __name__ == "__main__":
