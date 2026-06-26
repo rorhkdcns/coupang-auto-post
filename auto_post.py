@@ -155,7 +155,8 @@ def bake_pil_summary_card(prod_name, price_str, proxy_img_url, bullet_points):
 
     file_name = f"cp_card_{int(time.time())}.webp"
     card.save(file_name, "WEBP", quality=85)
-    with open(file_name, "rb") as f: encoded = base64.b64encode(f.read()).decode("utf-8")
+    with open(file_name, "rb") as f: 
+        encoded = base64.b64encode(f.read()).decode("utf-8")
     git_path = f"blog_images/coupang/{file_name}"
     url = f"https://api.github.com/repos/{GITHUB_USER_ID}/{GITHUB_REPO_NAME}/contents/{git_path}"
     headers = {"Authorization": f"Bearer {gh_token}", "Accept": "application/vnd.github.v3+json"}
@@ -165,68 +166,193 @@ def bake_pil_summary_card(prod_name, price_str, proxy_img_url, bullet_points):
     except: pass
     return ""
 
-# ★ 핵심: 환경에 상관없이 100% 사진을 보장하는 3중 방어 이미지 추출기
-def get_bulletproof_image_url(raw_coupang_url, prod_name, price_str, bullets):
+def generate_image_with_gemini(ai_client, prod_name, price_str, card_bullets):
+    """Gemini로 상품 분석 이미지 생성"""
+    try:
+        # 이미지 프롬프트 생성
+        bullet_text = "\n".join([f"• {b}" for b in card_bullets[:3]])
+        image_prompt = (
+            f"Create a professional product analysis card for: {prod_name}\n"
+            f"Price: {price_str}\n"
+            f"Key Points:\n{bullet_text}\n\n"
+            "Design requirements:\n"
+            "- Modern, clean product card design\n"
+            "- Professional Korean e-commerce style\n"
+            "- Include product name, price, and key benefits\n"
+            "- Use red (#E52528) accent color\n"
+            "- High quality, suitable for blog thumbnail\n"
+            "- 16:9 aspect ratio\n"
+            "- Text must be clearly readable"
+        )
+        
+        print(f"🎨 Gemini 이미지 생성 시작...")
+        
+        # Gemini 이미지 생성
+        response = ai_client.models.generate_images(
+            model="imagen-3.0-generate-001",
+            prompt=image_prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.7
+            )
+        )
+        
+        if response and response.generated_images:
+            img_data = response.generated_images[0]
+            
+            # 이미지를 파일로 저장
+            file_name = f"gemini_card_{int(time.time())}.webp"
+            
+            # PIL Image로 변환 및 저장
+            if hasattr(img_data, '_image'):
+                img = img_data._image
+            else:
+                img = Image.open(io.BytesIO(img_data.image_bytes)).convert('RGB')
+            
+            img.save(file_name, "WEBP", quality=85)
+            
+            # GitHub에 업로드
+            gh_token = os.environ.get("GITHUB_TOKEN")
+            if gh_token:
+                with open(file_name, "rb") as f:
+                    encoded = base64.b64encode(f.read()).decode("utf-8")
+                
+                git_path = f"blog_images/gemini/{file_name}"
+                url = f"https://api.github.com/repos/{GITHUB_USER_ID}/{GITHUB_REPO_NAME}/contents/{git_path}"
+                headers = {"Authorization": f"Bearer {gh_token}", "Accept": "application/vnd.github.v3+json"}
+                
+                res_put = requests.put(
+                    url, 
+                    headers=headers, 
+                    json={"message": f"Gemini Card: {file_name}", "content": encoded, "branch": "main"}, 
+                    timeout=10
+                )
+                
+                if res_put.status_code in [200, 201]:
+                    cdn_url = f"https://cdn.jsdelivr.net/gh/{GITHUB_USER_ID}/{GITHUB_REPO_NAME}@main/{git_path}"
+                    print(f"✅ Gemini 이미지 생성 및 업로드 성공: {cdn_url}")
+                    os.remove(file_name)  # 로컬 파일 삭제
+                    return cdn_url, True
+            
+            # GitHub 토큰 없으면 로컬 파일 경로 반환
+            print(f"⚠️ GitHub 토큰 없음, 로컬 경로 반환")
+            return file_name, True
+            
+    except Exception as e:
+        print(f"⚠️ Gemini 이미지 생성 실패: {e}")
+    
+    return None, False
+
+def get_bulletproof_image_url(raw_coupang_url, prod_name, price_str, bullets, ai_client=None, use_gemini=True):
+    """4중 방어: Gemini 생성 → PIL 카드 → 원본 박제 → 실시간 프록시"""
+    
+    # 1안: Gemini 이미지 생성 (가장 우선)
+    if use_gemini and ai_client:
+        gemini_url, is_generated = generate_image_with_gemini(ai_client, prod_name, price_str, bullets)
+        if gemini_url:
+            return gemini_url, True
+    
+    if not raw_coupang_url or not raw_coupang_url.strip():
+        print("⚠️ [이미지 URL 공백] 기본 쿠팡 로고 링크로 대체")
+        return "https://image.coupang.com/common/img_logo_coupang.png", False
+    
     clean_target = re.sub(r'^https?://', '', raw_coupang_url)
     weserv_proxy = f"https://images.weserv.nl/?url={urllib.parse.quote(clean_target)}"
     
-    # 1안: PIL 카드 제작 (깃허브 액션 환경일 때 성공)
+    # 2안: PIL 카드 제작
     card_cdn = bake_pil_summary_card(prod_name, price_str, weserv_proxy, bullets)
-    if card_cdn: return card_cdn, True
+    if card_cdn:
+        print(f"✅ PIL 카드 생성 성공: {card_cdn}")
+        return card_cdn, True
     
-    # 2안: 원본 박제 (깃허브 액션 환경일 때 성공)
+    # 3안: 원본 박제
     hero_cdn = download_and_upload_image_to_github(weserv_proxy, prefix="hero")
-    if hero_cdn: return hero_cdn, False
+    if hero_cdn:
+        print(f"✅ 원본 이미지 업로드 성공: {hero_cdn}")
+        return hero_cdn, False
     
-    # 3안: 내 PC 로컬 테스트 등 깃허브 업로드 불가 시 다이렉트 프록시 송출!
+    # 4안: 프록시
     print("⚠️ [로컬 환경 감지] 깃허브 업로드를 생략하고 실시간 이미지 우회 링크로 대체 송출합니다.")
     return weserv_proxy, False
 
-# (위쪽 import 및 설정 로직은 기존과 동일)
+def markdown_table_to_html(markdown_table):
+    """마크다운 테이블을 HTML 테이블로 변환"""
+    if not markdown_table or not markdown_table.strip():
+        return ""
+    
+    lines = [line.strip() for line in markdown_table.split('\n') if line.strip() and line.strip().startswith('|')]
+    if len(lines) < 2:
+        return ""
+    
+    html = '<table style="border-collapse: collapse; width: 100%; margin: 0 auto; text-align: center; border: 1px solid #cbd5e1;">'
+    
+    # 헤더 처리
+    header_cells = [cell.strip() for cell in lines[0].split('|')[1:-1]]
+    html += '<thead style="background-color: #f1f5f9;"><tr>'
+    for cell in header_cells:
+        html += f'<th style="border: 1px solid #cbd5e1; padding: 12px; font-weight: bold; color: #1e293b;">{cell}</th>'
+    html += '</tr></thead>'
+    
+    # 구분선 스킵하고 바디 처리
+    html += '<tbody>'
+    for line in lines[2:]:
+        cells = [cell.strip() for cell in line.split('|')[1:-1]]
+        html += '<tr>'
+        for cell in cells:
+            html += f'<td style="border: 1px solid #cbd5e1; padding: 10px; color: #475569;">{cell}</td>'
+        html += '</tr>'
+    html += '</tbody></table>'
+    
+    return html
 
 def format_paragraphs(text):
-    if not text or not text.strip(): return ""
+    """텍스트 포맷팅: 마크다운 → HTML, 키워드 강조, 테이블 변환"""
+    if not text or not text.strip(): 
+        return ""
     
     # [핵심] **키워드**를 빨간 볼드로 치환
     text = re.sub(r'\*\*(.*?)\*\*', r'<span style="color:#E52528; font-weight:bold;">\1</span>', text)
     
     chunks = []
-    # 문장 단위로 쪼개기
     paragraphs = text.split('\n')
     
     for p in paragraphs:
         p = p.strip()
-        if not p: continue
+        if not p: 
+            continue
         
         # 표 처리
         if p.startswith('|'):
-            chunks.append(f'<div style="margin: 30px auto; overflow-x: auto; width: 90%;"><table style="border-collapse: collapse; width: 100%; margin: 0 auto; text-align: center; border: 1px solid #cbd5e1;">')
-            # (이하 표 로직 동일)
+            table_html = markdown_table_to_html(p)
+            if table_html:
+                chunks.append(f'<div style="margin: 30px auto; overflow-x: auto; width: 95%;">{table_html}</div>')
         else:
-            # [핵심] 일반 본문은 가운데 정렬 + 줄바꿈 유지
+            # 일반 본문: 가운데 정렬 + 줄바꿈 유지
             chunks.append(f'<p style="text-align: center; font-size: 16px; line-height: 1.9; margin-bottom: 25px; color: #333;">{p}</p>')
     
     return "".join(chunks)
 
-# 메인 함수 내의 조립부 수정
-    # [가독성 강화] 불필요한 줄바꿈을 제거하고, CSS로 간격 조절
-    final_html = f'''
-    <div style="text-align: center; max-width: 650px; margin: 0 auto; font-family: sans-serif;">
-        {ftc_msg}
-        {generate_adsense_html()}
-        <div style="text-align: center;">{format_paragraphs(ai_data['hook_intro'])}</div>
-        {hero_html}
-        {cta_btn}
-        <h3 style="text-align: center; font-size: 20px; font-weight: bold; border-bottom: 2px solid #E52528; display: inline-block; padding-bottom: 5px; margin: 40px 0;">💡 주요 스펙 한눈에 보기</h3>
-        <div style="text-align: center;">{format_paragraphs(ai_data['spec_table'])}</div>
-        <h3 style="text-align: center; font-size: 20px; font-weight: bold; border-bottom: 2px solid #E52528; display: inline-block; padding-bottom: 5px; margin: 40px 0;">🔍 솔직한 장단점 분석</h3>
-        <div style="text-align: center;">{format_paragraphs(ai_data['pros_cons_body'])}</div>
-        <h3 style="text-align: center; font-size: 20px; font-weight: bold; border-bottom: 2px solid #E52528; display: inline-block; padding-bottom: 5px; margin: 40px 0;">🎯 총평</h3>
-        <div style="text-align: center;">{format_paragraphs(ai_data['verdict'])}</div>
-        {cta_btn}
-        {ftc_msg}
-        {generate_adsense_html()}
-    </div>
+def generate_adsense_html():
+    """Google AdSense HTML 생성"""
+    return f'<div class="adsense-container" style="margin:30px auto; text-align:center;"><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={GOOGLE_ADSENSE_CLIENT}" crossorigin="anonymous"></script><ins class="adsbygoogle" style="display:block" data-ad-client="{GOOGLE_ADSENSE_CLIENT}" data-ad-slot="{GOOGLE_ADSENSE_SLOT}" data-ad-format="auto" data-full-width-responsive="true"></ins><script>(adsbygoogle = window.adsbygoogle || []).push({{}});</script></div>'
+
+def validate_ai_data(ai_data):
+    """AI 응답 데이터 검증"""
+    required_fields = ['title', 'slug', 'hook_intro', 'spec_table', 'pros_cons_body', 'verdict', 'card_bullets', 'tags']
+    
+    for field in required_fields:
+        if field not in ai_data or not ai_data[field]:
+            print(f"⚠️ 필수 필드 누락: {field}")
+            return False
+    
+    if not isinstance(ai_data['card_bullets'], list) or len(ai_data['card_bullets']) < 3:
+        print("⚠️ card_bullets는 3개 이상의 배열이어야 합니다")
+        return False
+    
+    if not isinstance(ai_data['tags'], list) or len(ai_data['tags']) < 1:
+        print("⚠️ tags는 1개 이상의 배열이어야 합니다")
+        return False
+    
+    return True
 
 def main():
     print("🔄 [쿠팡 파트너스 API V2] 정석 포스팅 공장을 가동합니다.")
@@ -234,19 +360,27 @@ def main():
     coupang_secret = (os.environ.get("COUPANG_SECRET_KEY") or os.environ.get("SECRET_KEY") or "").strip()
     gemini_key = (os.environ.get("API_KEY") or "").strip()
     token_base64 = (os.environ.get("TOKEN_PICKLE_BASE64") or "").strip()
-    if not (gemini_key and token_base64 and coupang_access and coupang_secret): return
+    
+    if not (gemini_key and token_base64 and coupang_access and coupang_secret):
+        print("❌ 필수 환경 변수 누락")
+        return
 
     try:
         credentials = pickle.loads(base64.b64decode(token_base64))
         blogger_service = build('blogger', 'v3', credentials=credentials)
         if not TEST_MODE:
-            if check_already_posted(blogger_service, BLOG_ID): return
+            if check_already_posted(blogger_service, BLOG_ID): 
+                return
         else:
             print("🧪 [테스트 모드 ON] 30분 중복 방지를 패스합니다.")
-    except Exception as e: print(f"⚠️ 사전 중복 체크 에러: {e}")
+    except Exception as e:
+        print(f"⚠️ 사전 중복 체크 에러: {e}")
+        return
 
     products = get_coupang_v2_products(coupang_access, coupang_secret)
-    if not products: return
+    if not products:
+        print("❌ 쿠팡 상품 데이터 조회 실패")
+        return
     
     target_p = products[0]
     raw_img = target_p.get('productImage', '').strip()
@@ -260,7 +394,6 @@ def main():
 
     ai_client = genai.Client(api_key=gemini_key)
     
-    # ★ 페르소나 대공사: 허세 인플루언서 퇴출 -> 담백한 쇼핑 에디터 탑재
     prompt = (
         "너는 과장된 허세 없이 핵심 정보만 담백하게 짚어주는 '스마트 쇼핑 전문 에디터'야. "
         "아래 상품에 대해 스마트폰에서 가독성 좋게 정독되는 집중 분석 칼럼을 작성해줘.\n\n"
@@ -282,7 +415,7 @@ def main():
         '  "title": "에어팟 프로 2세대 내돈내산 솔직 후기",\n'
         '  "slug": "airpods-pro-2-review",\n'
         '  "hook_intro": "도입부...",\n'
-        '  "spec_table": "|스펙|내용| 표...",\n'
+        '  "spec_table": "|스펙|내용|\n|---|---|\n|기능|설명|",\n'
         '  "pros_cons_body": "장단점...",\n'
         '  "verdict": "추천 대상...",\n'
         '  "card_bullets": ["노이즈캔슬링 압도적", "C타입 호환성 굿", "배터리 30시간 지속"],\n'
@@ -293,40 +426,71 @@ def main():
     config = types.GenerateContentConfig(response_mime_type="application/json", temperature=0.7)
     ai_data = {}
     for model in ['gemini-2.5-flash', 'gemini-2.5-pro']:
-        for _ in range(3):
+        for attempt in range(3):
             try:
                 res = ai_client.models.generate_content(model=model, contents=prompt, config=config)
-                if res and res.text: 
-                    ai_data = json.loads(res.text.replace('```json','').replace('```','').strip())
-                    break
-            except: time.sleep(5)
-        if ai_data: break
+                if res and res.text:
+                    raw_json = res.text.replace('```json', '').replace('```', '').strip()
+                    ai_data = json.loads(raw_json)
+                    
+                    # ★ AI 데이터 검증
+                    if validate_ai_data(ai_data):
+                        print(f"✅ AI 응답 검증 성공 ({model})")
+                        break
+                    else:
+                        ai_data = {}
+                        print(f"⚠️ AI 응답 검증 실패 ({model}), 재시도...")
+                        time.sleep(2)
+            except Exception as e:
+                print(f"⚠️ AI 응답 파싱 에러 (시도 {attempt+1}): {e}")
+                time.sleep(2)
+        
+        if ai_data:
+            break
 
-    if not ai_data: return
+    if not ai_data:
+        print("❌ AI 데이터 생성 실패")
+        return
 
-    title, raw_slug, tags = ai_data['title'], ai_data['slug'], ai_data['tags'][:4]
+    title = ai_data['title']
+    raw_slug = ai_data['slug']
+    tags = ai_data['tags'][:4]
     slug = re.sub(r'[^a-z0-9\-]', '', raw_slug.lower()).strip('-') or "best-coupang-item"
 
-    # ★ 3중 방어 이미지 추출 실행
-    best_img_url, is_card = get_bulletproof_image_url(img_url, p_name, p_price_str, ai_data.get('card_bullets', []))
+    # ★ 4중 방어 이미지 추출 실행 (Gemini 생성 우선)
+    best_img_url, is_card = get_bulletproof_image_url(
+        img_url, p_name, p_price_str, 
+        ai_data.get('card_bullets', []),
+        ai_client=ai_client,
+        use_gemini=True
+    )
 
-    def generate_adsense_html():
-        return f'<div class="adsense-container" style="margin:30px auto; text-align:center;"><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={GOOGLE_ADSENSE_CLIENT}" crossorigin="anonymous"></script><ins class="adsbygoogle" style="display:block" data-ad-client="{GOOGLE_ADSENSE_CLIENT}" data-ad-slot="{GOOGLE_ADSENSE_SLOT}" data-ad-format="auto" data-full-width-responsive="true"></ins><script>(adsbygoogle = window.adsbygoogle || []).push({{}});</script></div>'
-
+    # ★ CTA 버튼 정의 (중복 제거)
     cta_btn = f'<div style="margin:40px 0;"><a href="{link_url}" target="_blank" style="background-color:#E52528; color:#FFFFFF; font-size:17px; font-weight:bold; padding:18px 30px; text-decoration:none; border-radius:10px; display:inline-block; box-shadow:0 6px 16px rgba(229,37,40,0.25);">🚀 실시간 최저가 및 로켓배송 가능 여부 확인하기</a></div>'
-
+    
+    # ★ 이미지 영역 정의 (중복 제거)
     sub_txt = "👆 이미지를 터치하면 실시간 최저가 페이지로 이동합니다" if is_card else "👆 사진을 터치하면 로켓배송 확인 페이지로 이동합니다"
     hero_html = f'<div style="margin:35px 0;"><a href="{link_url}" target="_blank"><img src="{best_img_url}" alt="{title}" style="max-width:90%; border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,0.08);"/></a><p style="font-size:12px; color:#94a3b8; margin-top:8px;">{sub_txt}</p></div>'
 
     ftc_msg = "<p style='color:#94a3b8; font-size:12px; margin-bottom:25px;'>💡 이 포스팅은 쿠팡 파트너스 활동의 일환으로, 이에 따른 일정액의 수수료를 제공받습니다.</p>"
     h3_style = 'font-size: 20px; font-weight: bold; color: #1e293b; margin: 45px 0 22px 0; display: inline-block; border-bottom: 2px solid #E52528; padding-bottom: 6px;'
 
-    inner_content = ftc_msg + generate_adsense_html() + \
-                    format_paragraphs(ai_data['hook_intro']) + hero_html + cta_btn + \
-                    f'<h3 style="{h3_style}">💡 주요 스펙 한눈에 보기</h3>' + format_paragraphs(ai_data['spec_table']) + \
-                    f'<h3 style="{h3_style}">🔍 내돈내산 장단점 집중 분석</h3>' + format_paragraphs(ai_data['pros_cons_body']) + \
-                    f'<h3 style="{h3_style}">🎯 총평: 이런 분들께 추천합니다</h3>' + format_paragraphs(ai_data['verdict']) + \
-                    cta_btn + generate_adsense_html()
+    # ★ 최종 HTML 구성 (중복 제거, 한 번에 정의)
+    inner_content = (
+        ftc_msg + 
+        generate_adsense_html() + 
+        format_paragraphs(ai_data['hook_intro']) + 
+        hero_html + 
+        cta_btn + 
+        f'<h3 style="{h3_style}">💡 주요 스펙 한눈에 보기</h3>' + 
+        format_paragraphs(ai_data['spec_table']) + 
+        f'<h3 style="{h3_style}">🔍 내돈내산 장단점 집중 분석</h3>' + 
+        format_paragraphs(ai_data['pros_cons_body']) + 
+        f'<h3 style="{h3_style}">🎯 총평: 이런 분들께 추천합니다</h3>' + 
+        format_paragraphs(ai_data['verdict']) + 
+        cta_btn + 
+        generate_adsense_html()
+    )
 
     final_html = f'<div style="max-width: 660px; margin: 0 auto; text-align: center; word-break: keep-all; font-family: -apple-system, BlinkMacSystemFont, Pretendard, Roboto, sans-serif; color: #222222;">{inner_content}</div>'
 
@@ -352,7 +516,8 @@ def main():
         ).execute()
 
         print("🚀 쿠팡 파트너스 정석 포스팅 완벽 생존 발행 성공!")
-    except Exception as e: print(f"❌ 최종 발행 에러: {e}")
+    except Exception as e:
+        print(f"❌ 최종 발행 에러: {e}")
 
 if __name__ == "__main__":
     main()
