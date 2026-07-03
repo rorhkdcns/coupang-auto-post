@@ -100,9 +100,7 @@ def create_pil_card(prod_name, price_str, card_bullets):
     try:
         print("🎨 PIL 카드 생성 중...")
         
-        # 기본 폰트
         try:
-            # 한글 폰트 다운로드
             font_url = "https://github.com/google/fonts/raw/main/ofl/nanumgothic/NanumGothic-Bold.ttf"
             font_path = "/tmp/font.ttf"
             if not os.path.exists(font_path):
@@ -113,44 +111,32 @@ def create_pil_card(prod_name, price_str, card_bullets):
         except:
             title_font = price_font = bullet_font = ImageFont.load_default()
 
-        # 1200x630 카드 (16:9)
         card = Image.new('RGB', (1200, 630), color='#FFFFFF')
         draw = ImageDraw.Draw(card)
         
-        # 배경 그라데이션
         for y in range(630):
             val = int(255 - y * 0.05)
             draw.line([(0, y), (1200, y)], fill=(val, val, val))
         
-        # 왼쪽 빨간 바
         draw.rectangle([0, 0, 8, 630], fill='#E52528', width=0)
         
-        # 배지
         draw.rectangle([60, 45, 280, 95], fill='#E52528', width=0)
         draw.text((170, 70), "COUPANG PICK", fill='#FFFFFF', font=bullet_font, anchor="mm")
         
-        # 상품명 (최대 35자)
         clean_name = prod_name if len(prod_name) <= 35 else prod_name[:35] + "..."
         draw.text((90, 150), clean_name, fill='#1e293b', font=title_font, anchor="lm")
         
-        # 가격
         draw.text((90, 270), price_str, fill='#E52528', font=price_font, anchor="lm")
         
-        # 구분선
         draw.line([(90, 330), (1100, 330)], fill='#E2E8F0', width=3)
         
-        # 핵심 포인트 3개
         start_y = 380
         for i, bullet in enumerate(card_bullets[:3]):
-            # 번호 원형
             draw.ellipse([75, start_y-15, 120, start_y+30], fill='#E52528', width=0)
             draw.text((97, start_y+7), str(i+1), fill='#FFFFFF', font=bullet_font, anchor="mm")
-            
-            # 텍스트
             draw.text((150, start_y+7), bullet[:25], fill='#334155', font=bullet_font, anchor="lm")
             start_y += 70
 
-        # 파일 저장
         file_name = f"card_{int(time.time())}_{random.randint(1000, 9999)}.webp"
         card.save(file_name, "WEBP", quality=92)
         print(f"✅ PIL 카드 로컬 생성 완료: {file_name}")
@@ -194,10 +180,8 @@ def upload_image_to_github(file_path):
 
 def get_clean_title(raw_title):
     """제목 정제: 중복 제거, 길이 조정"""
-    # 오타 수정
     clean = raw_title.replace("휴대폼", "휴대용")
     
-    # 중복 제거 (예: "PD 25W" 두 번)
     words = clean.split()
     seen = set()
     unique_words = []
@@ -208,7 +192,6 @@ def get_clean_title(raw_title):
     
     clean = " ".join(unique_words)
     
-    # 길이 제한 (최대 45자)
     if len(clean) > 45:
         clean = clean[:42] + "..."
     
@@ -225,14 +208,12 @@ def markdown_table_to_html(markdown_table):
     
     html = '<table style="border-collapse: collapse; width: 100%; margin: 0 auto; text-align: center; border: 2px solid #cbd5e1;">'
     
-    # 헤더
     header_cells = [cell.strip() for cell in lines[0].split('|')[1:-1]]
     html += '<thead><tr style="background-color: #f1f5f9;">'
     for cell in header_cells:
         html += f'<th style="border: 1px solid #cbd5e1; padding: 14px 10px; font-weight: bold; color: #1e293b; text-align: center; font-size: 14px;">{cell}</th>'
     html += '</tr></thead>'
     
-    # 바디
     html += '<tbody>'
     for line in lines[2:]:
         cells = [cell.strip() for cell in line.split('|')[1:-1]]
@@ -249,7 +230,6 @@ def format_content(text):
     if not text or not text.strip(): 
         return ""
     
-    # 굵은 텍스트
     text = re.sub(r'\*\*(.*?)\*\*', r'<span style="color:#E52528; font-weight:bold;">\1</span>', text)
     
     chunks = []
@@ -259,7 +239,6 @@ def format_content(text):
     for line in lines:
         line = line.rstrip()
         
-        # 빈 줄
         if not line.strip():
             if in_list:
                 chunks.append('</ul>')
@@ -267,7 +246,6 @@ def format_content(text):
             chunks.append('<div style="height: 20px;"></div>')
             continue
         
-        # 제목 (이모지)
         if line.startswith(('🎯', '⚠️', '💡', '🔍', '✨', '📋')):
             if in_list:
                 chunks.append('</ul>')
@@ -275,7 +253,6 @@ def format_content(text):
             chunks.append(f'<h4 style="font-size: 18px; font-weight: bold; color: #1e293b; margin: 30px 0 16px 0; text-align: center; border-bottom: 2px solid #E52528; padding-bottom: 8px; display: inline-block; width: 100%;">{line}</h4>')
             continue
         
-        # 리스트 항목
         if line.strip().startswith(('•', '-', '◆', '▶')):
             if not in_list:
                 chunks.append('<ul style="margin: 16px auto; padding-left: 0; list-style-type: none; text-align: center; display: inline-block;">')
@@ -284,7 +261,6 @@ def format_content(text):
             chunks.append(f'<li style="margin-bottom: 10px; color: #475569; font-size: 15px; line-height: 1.6; text-align: left; margin-left: 30px;">{list_text}</li>')
             continue
         
-        # 표
         if line.startswith('|'):
             if in_list:
                 chunks.append('</ul>')
@@ -294,7 +270,6 @@ def format_content(text):
                 chunks.append(f'<div style="margin: 30px auto; overflow-x: auto; width: 95%;">{table_html}</div>')
             continue
         
-        # 일반 문단
         if in_list:
             chunks.append('</ul>')
             in_list = False
@@ -310,9 +285,58 @@ def generate_adsense_html():
     """Google AdSense"""
     return f'<div style="margin: 40px 0; text-align: center;"><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={GOOGLE_ADSENSE_CLIENT}" crossorigin="anonymous"></script><ins class="adsbygoogle" style="display:block" data-ad-client="{GOOGLE_ADSENSE_CLIENT}" data-ad-slot="{GOOGLE_ADSENSE_SLOT}" data-ad-format="auto" data-full-width-responsive="true"></ins><script>(adsbygoogle = window.adsbygoogle || []).push({{}});</script></div>'
 
+# [신규] 목차(TOC) 박스
+def build_toc_html():
+    return '''
+<div style="max-width: 500px; margin: 30px auto; background:#fff5f5; border:1px solid #fecaca; border-radius:12px; padding:20px 24px; text-align:left;">
+    <p style="font-weight:700; font-size:15px; color:#1e293b; margin:0 0 12px 0; text-align:center;">📋 목차</p>
+    <ul style="margin:0; padding-left:20px; font-size:14px; color:#334155; line-height:2;">
+        <li><a href="#spec" style="color:#E52528; text-decoration:none;">주요 스펙</a></li>
+        <li><a href="#proscons" style="color:#E52528; text-decoration:none;">장점과 단점</a></li>
+        <li><a href="#verdict" style="color:#E52528; text-decoration:none;">추천 대상</a></li>
+        <li><a href="#faq" style="color:#E52528; text-decoration:none;">자주 묻는 질문</a></li>
+        <li><a href="#conclusion" style="color:#E52528; text-decoration:none;">결론</a></li>
+    </ul>
+</div>
+'''
+
+# [신규] 섹션별 "✅ 요약" 박스
+def make_section_summary(text):
+    if not text or not text.strip(): return ""
+    return f'''
+<div style="max-width: 500px; margin: 20px auto 10px auto; background:#fff5f5; border:1px solid #fecaca; border-radius:10px; padding:14px 20px; text-align:left;">
+    <p style="margin:0; font-size:14px; color:#E52528; font-weight:700;">✅ 요약</p>
+    <p style="margin:6px 0 0 0; font-size:14px; color:#334155; line-height:1.6;">{text}</p>
+</div>
+'''
+
+# [신규] FAQ 섹션
+def build_faq_html(faq_list):
+    if not faq_list: return ""
+    items = ""
+    for item in faq_list:
+        q = (item.get("question") or "").strip()
+        a = (item.get("answer") or "").strip()
+        if not q or not a: continue
+        items += f'''
+        <div style="margin-bottom:20px; text-align:left;">
+            <p style="font-weight:700; font-size:15px; color:#1e293b; margin:0 0 6px 0;">Q. {q}</p>
+            <p style="font-size:14px; color:#475569; line-height:1.7; margin:0;">A. {a}</p>
+        </div>'''
+    if not items: return ""
+    return f'''
+<h3 id="faq" style="font-size: 19px; font-weight: bold; color: #1e293b; margin: 48px 0 24px 0; display: inline-block; border-bottom: 3px solid #E52528; padding-bottom: 8px;">❓ 자주 묻는 질문</h3>
+<div style="max-width:600px; margin:20px auto 0 auto;">{items}</div>
+'''
+
+# [신규] 결론 섹션
+def build_conclusion_html(conclusion_text):
+    if not conclusion_text or not conclusion_text.strip(): return ""
+    return f'<h3 id="conclusion" style="font-size: 19px; font-weight: bold; color: #1e293b; margin: 48px 0 24px 0; display: inline-block; border-bottom: 3px solid #E52528; padding-bottom: 8px;">🏁 결론</h3>{format_content(conclusion_text)}'
+
 def validate_ai_data(ai_data):
     """AI 응답 검증"""
-    required_fields = ['title', 'slug', 'hook_intro', 'spec_table', 'pros_cons_body', 'verdict', 'card_bullets', 'tags']
+    required_fields = ['title', 'slug', 'hook_intro', 'spec_table', 'pros_cons_body', 'verdict', 'card_bullets', 'tags', 'faq', 'conclusion']
     
     for field in required_fields:
         if field not in ai_data or not ai_data[field]:
@@ -325,6 +349,10 @@ def validate_ai_data(ai_data):
     
     if not isinstance(ai_data['tags'], list) or len(ai_data['tags']) < 1:
         print("⚠️ tags는 1개 이상의 배열이어야 합니다")
+        return False
+    
+    if not isinstance(ai_data['faq'], list) or len(ai_data['faq']) < 2:
+        print("⚠️ faq는 2개 이상의 배열이어야 합니다")
         return False
     
     return True
@@ -352,7 +380,6 @@ def main():
         print(f"❌ 초기화 에러: {e}")
         return
 
-    # 상품 조회
     products = get_coupang_v2_products(coupang_access, coupang_secret)
     if not products:
         print("❌ 상품 조회 실패")
@@ -368,7 +395,6 @@ def main():
 
     print(f"🛒 상품: {p_name} ({p_price_str})")
 
-    # AI 분석
     ai_client = genai.Client(api_key=gemini_key)
     
     prompt = (
@@ -383,7 +409,8 @@ def main():
         "   |기능|내용|\n"
         "   |크기|내용|\n"
         "   (5행 이상, 구분선 필수)\n"
-        "4. [장점과 단점(pros_cons_body)]: 800자 이상.\n"
+        "4. [스펙 요약(spec_summary)]: 스펙표 핵심을 2줄(60~80자)로 압축 요약.\n"
+        "5. [장점과 단점(pros_cons_body)]: 800자 이상.\n"
         "   형식:\n"
         "   🎯 장점\n"
         "   • 장점 1\n"
@@ -391,20 +418,34 @@ def main():
         "   • 장점 3\n\n"
         "   ⚠️ 단점\n"
         "   • 단점 1\n"
-        "5. [결론(verdict)]: 300자 이상. '이런 분들에게 추천' 형식.\n"
-        "6. [카드 핵심(card_bullets)]: 배열, 각 20자 이내\n"
-        "7. [태그(tags)]: 3~4개 배열\n"
-        "8. [slug]: 영어 소문자 2~3개 단어\n\n"
+        "6. [장단점 요약(pros_cons_summary)]: 장단점 핵심을 2줄로 압축 요약.\n"
+        "7. [결론(verdict)]: 300자 이상. '이런 분들에게 추천' 형식.\n"
+        "8. [추천대상 요약(verdict_summary)]: 추천 대상을 2줄로 압축 요약.\n"
+        "9. [카드 핵심(card_bullets)]: 배열, 각 20자 이내\n"
+        "10. [태그(tags)]: 3~4개 배열\n"
+        "11. [slug]: 영어 소문자 2~3개 단어\n"
+        "12. [FAQ]: faq 항목에 이 상품/카테고리에 대해 구매 전 실제로 궁금해할 질문 4개와 답변(2~3문장)을 작성하라.\n"
+        "13. [결론문단(conclusion)]: 글 전체를 마무리하는 문단(200~300자). 핵심 재확인 + 구매 조언으로 끝내라.\n\n"
         "반드시 이 JSON만 출력하라:\n"
         "{\n"
         '  "title": "상품명 - 핵심 특징",\n'
         '  "slug": "product-slug",\n'
         '  "hook_intro": "도입부...",\n'
         '  "spec_table": "|항목|사양|\n|---|---|\n|항목1|설명|",\n'
+        '  "spec_summary": "스펙 핵심 요약 2줄",\n'
         '  "pros_cons_body": "🎯 장점\n• 항목1\n\n⚠️ 단점\n• 항목1",\n'
+        '  "pros_cons_summary": "장단점 핵심 요약 2줄",\n'
         '  "verdict": "결론...",\n'
+        '  "verdict_summary": "추천대상 핵심 요약 2줄",\n'
         '  "card_bullets": ["항목1", "항목2", "항목3"],\n'
-        '  "tags": ["태그1", "태그2"]\n'
+        '  "tags": ["태그1", "태그2"],\n'
+        '  "faq": [\n'
+        '    {"question": "질문1", "answer": "답변1"},\n'
+        '    {"question": "질문2", "answer": "답변2"},\n'
+        '    {"question": "질문3", "answer": "답변3"},\n'
+        '    {"question": "질문4", "answer": "답변4"}\n'
+        '  ],\n'
+        '  "conclusion": "전체 내용을 마무리하는 결론 문단"\n'
         "}"
     )
 
@@ -436,7 +477,6 @@ def main():
         print("❌ AI 분석 실패")
         return
 
-    # 제목 정제
     raw_title = ai_data['title']
     title = get_clean_title(raw_title)
     raw_slug = ai_data['slug']
@@ -446,12 +486,10 @@ def main():
     print(f"📝 제목: {title}")
     print(f"📌 슬러그: {slug}")
 
-    # ★ 이미지 생성 (강제 실행)
     card_file, is_card = create_pil_card(p_name, p_price_str, ai_data.get('card_bullets', []))
     best_img_url = None
     
     if card_file:
-        # GitHub 업로드 시도
         cdn_url = upload_image_to_github(card_file)
         best_img_url = cdn_url if cdn_url else card_file
         print(f"🖼️ 이미지 URL: {best_img_url}")
@@ -460,7 +498,6 @@ def main():
         best_img_url = img_url
         is_card = False
 
-    # HTML 구성
     cta_btn = f'<div style="margin: 40px 0; text-align: center;"><a href="{link_url}" target="_blank" style="background-color: #E52528; color: #FFFFFF; font-size: 17px; font-weight: bold; padding: 18px 36px; text-decoration: none; border-radius: 10px; display: inline-block; box-shadow: 0 6px 16px rgba(229, 37, 40, 0.3);">🚀 쿠팡에서 최저가 확인하기</a></div>'
     
     hero_html = f'<div style="margin: 40px 0; text-align: center;"><a href="{link_url}" target="_blank"><img src="{best_img_url}" alt="{title}" style="max-width: 90%; border-radius: 16px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);"/></a><p style="font-size: 12px; color: #94a3b8; margin-top: 12px;">👆 이미지를 클릭하면 쿠팡 페이지로 이동합니다</p></div>'
@@ -468,10 +505,14 @@ def main():
     ftc_msg = "<p style='color: #94a3b8; font-size: 12px; margin-bottom: 32px;'>💡 이 포스팅은 쿠팡 파트너스 활동으로 일정 수수료를 제공받습니다.</p>"
     h3_style = 'font-size: 19px; font-weight: bold; color: #1e293b; margin: 48px 0 24px 0; display: inline-block; border-bottom: 3px solid #E52528; padding-bottom: 8px;'
 
-    # 최종 HTML
+    toc_html = build_toc_html()
+    faq_html = build_faq_html(ai_data.get('faq', []))
+    conclusion_html = build_conclusion_html(ai_data.get('conclusion', ''))
+
     inner_content = (
         ftc_msg + 
         generate_adsense_html() + 
+        toc_html +
         '<div style="height: 24px;"></div>' +
         format_content(ai_data['hook_intro']) + 
         '<div style="height: 28px;"></div>' +
@@ -479,21 +520,28 @@ def main():
         '<div style="height: 28px;"></div>' +
         cta_btn + 
         '<div style="height: 40px;"></div>' +
-        f'<h3 style="{h3_style}">📋 주요 스펙</h3>' + 
+        f'<h3 id="spec" style="{h3_style}">📋 주요 스펙</h3>' + 
         '<div style="height: 20px;"></div>' +
         format_content(ai_data['spec_table']) + 
+        make_section_summary(ai_data.get('spec_summary', '')) +
         '<div style="height: 40px;"></div>' +
-        f'<h3 style="{h3_style}">✨ 장점과 단점</h3>' + 
+        f'<h3 id="proscons" style="{h3_style}">✨ 장점과 단점</h3>' + 
         '<div style="height: 20px;"></div>' +
         format_content(ai_data['pros_cons_body']) + 
+        make_section_summary(ai_data.get('pros_cons_summary', '')) +
         '<div style="height: 40px;"></div>' +
-        f'<h3 style="{h3_style}">🎯 추천 대상</h3>' + 
+        f'<h3 id="verdict" style="{h3_style}">🎯 추천 대상</h3>' + 
         '<div style="height: 20px;"></div>' +
         format_content(ai_data['verdict']) + 
+        make_section_summary(ai_data.get('verdict_summary', '')) +
         '<div style="height: 40px;"></div>' +
         cta_btn + 
         '<div style="height: 28px;"></div>' +
-        generate_adsense_html()
+        faq_html +
+        '<div style="height: 28px;"></div>' +
+        generate_adsense_html() +
+        '<div style="height: 28px;"></div>' +
+        conclusion_html
     )
 
     final_html = f'<div style="max-width: 720px; margin: 0 auto; padding: 0 16px; text-align: center; font-family: -apple-system, BlinkMacSystemFont, Pretendard, Roboto, sans-serif; color: #222222; line-height: 1.7;">{inner_content}</div>'
@@ -501,7 +549,6 @@ def main():
     publish_time = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
     scheduled_iso = publish_time.strftime('%Y-%m-%dT%H:%M:%SZ')
 
-    # 블로그 발행
     try:
         print(f"📤 블로그 발행 중...")
         res_ins = blogger_service.posts().insert(
