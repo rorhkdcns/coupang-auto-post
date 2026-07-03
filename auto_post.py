@@ -96,7 +96,7 @@ def check_already_posted(blogger, blog_id):
     return False
 
 def create_pil_card(prod_name, price_str, card_bullets):
-    """★ 절대 실패하지 않는 PIL 카드 생성"""
+    """★ 절대 실패하지 않는 PIL 카드 생성 (시원시원한 큰 글씨 버전)"""
     try:
         print("🎨 PIL 카드 생성 중...")
         
@@ -105,11 +105,12 @@ def create_pil_card(prod_name, price_str, card_bullets):
             font_path = "/tmp/font.ttf"
             if not os.path.exists(font_path):
                 urllib.request.urlretrieve(font_url, font_path)
-            title_font = ImageFont.truetype(font_path, 50)
-            price_font = ImageFont.truetype(font_path, 58)
-            bullet_font = ImageFont.truetype(font_path, 26)
+            title_font = ImageFont.truetype(font_path, 64)
+            price_font = ImageFont.truetype(font_path, 74)
+            bullet_font = ImageFont.truetype(font_path, 34)
+            badge_font = ImageFont.truetype(font_path, 30)
         except:
-            title_font = price_font = bullet_font = ImageFont.load_default()
+            title_font = price_font = bullet_font = badge_font = ImageFont.load_default()
 
         card = Image.new('RGB', (1200, 630), color='#FFFFFF')
         draw = ImageDraw.Draw(card)
@@ -118,24 +119,24 @@ def create_pil_card(prod_name, price_str, card_bullets):
             val = int(255 - y * 0.05)
             draw.line([(0, y), (1200, y)], fill=(val, val, val))
         
-        draw.rectangle([0, 0, 8, 630], fill='#E52528', width=0)
+        draw.rectangle([0, 0, 10, 630], fill='#E52528', width=0)
         
-        draw.rectangle([60, 45, 280, 95], fill='#E52528', width=0)
-        draw.text((170, 70), "COUPANG PICK", fill='#FFFFFF', font=bullet_font, anchor="mm")
+        draw.rectangle([60, 40, 310, 100], fill='#E52528', width=0)
+        draw.text((185, 70), "COUPANG PICK", fill='#FFFFFF', font=badge_font, anchor="mm")
         
-        clean_name = prod_name if len(prod_name) <= 35 else prod_name[:35] + "..."
-        draw.text((90, 150), clean_name, fill='#1e293b', font=title_font, anchor="lm")
+        clean_name = prod_name if len(prod_name) <= 28 else prod_name[:28] + "..."
+        draw.text((90, 175), clean_name, fill='#1e293b', font=title_font, anchor="lm")
         
-        draw.text((90, 270), price_str, fill='#E52528', font=price_font, anchor="lm")
+        draw.text((90, 295), price_str, fill='#E52528', font=price_font, anchor="lm")
         
-        draw.line([(90, 330), (1100, 330)], fill='#E2E8F0', width=3)
+        draw.line([(90, 345), (1100, 345)], fill='#E2E8F0', width=3)
         
-        start_y = 380
+        start_y = 400
         for i, bullet in enumerate(card_bullets[:3]):
-            draw.ellipse([75, start_y-15, 120, start_y+30], fill='#E52528', width=0)
-            draw.text((97, start_y+7), str(i+1), fill='#FFFFFF', font=bullet_font, anchor="mm")
-            draw.text((150, start_y+7), bullet[:25], fill='#334155', font=bullet_font, anchor="lm")
-            start_y += 70
+            draw.ellipse([75, start_y-20, 133, start_y+38], fill='#E52528', width=0)
+            draw.text((104, start_y+9), str(i+1), fill='#FFFFFF', font=bullet_font, anchor="mm")
+            draw.text((155, start_y+9), bullet[:20], fill='#334155', font=bullet_font, anchor="lm")
+            start_y += 80
 
         file_name = f"card_{int(time.time())}_{random.randint(1000, 9999)}.webp"
         card.save(file_name, "WEBP", quality=92)
@@ -211,7 +212,7 @@ def markdown_table_to_html(markdown_table):
     header_cells = [cell.strip() for cell in lines[0].split('|')[1:-1]]
     html += '<thead><tr style="background-color: #f1f5f9;">'
     for cell in header_cells:
-        html += f'<th style="border: 1px solid #cbd5e1; padding: 14px 10px; font-weight: bold; color: #1e293b; text-align: center; font-size: 14px;">{cell}</th>'
+        html += f'<th style="border: 1px solid #cbd5e1; padding: 14px 10px; font-weight: bold; color: #1e293b; text-align: center; font-size: 16px;">{cell}</th>'
     html += '</tr></thead>'
     
     html += '<tbody>'
@@ -219,7 +220,7 @@ def markdown_table_to_html(markdown_table):
         cells = [cell.strip() for cell in line.split('|')[1:-1]]
         html += '<tr>'
         for cell in cells:
-            html += f'<td style="border: 1px solid #cbd5e1; padding: 12px 10px; color: #475569; text-align: center; font-size: 13px;">{cell}</td>'
+            html += f'<td style="border: 1px solid #cbd5e1; padding: 12px 10px; color: #475569; text-align: center; font-size: 15px;">{cell}</td>'
         html += '</tr>'
     html += '</tbody></table>'
     
@@ -250,7 +251,7 @@ def format_content(text):
             if in_list:
                 chunks.append('</ul>')
                 in_list = False
-            chunks.append(f'<h4 style="font-size: 18px; font-weight: bold; color: #1e293b; margin: 30px 0 16px 0; text-align: center; border-bottom: 2px solid #E52528; padding-bottom: 8px; display: inline-block; width: 100%;">{line}</h4>')
+            chunks.append(f'<h4 style="font-size: 20px; font-weight: bold; color: #1e293b; margin: 30px 0 16px 0; text-align: center; border-bottom: 2px solid #E52528; padding-bottom: 8px; display: inline-block; width: 100%;">{line}</h4>')
             continue
         
         if line.strip().startswith(('•', '-', '◆', '▶')):
@@ -258,7 +259,7 @@ def format_content(text):
                 chunks.append('<ul style="margin: 16px auto; padding-left: 0; list-style-type: none; text-align: center; display: inline-block;">')
                 in_list = True
             list_text = re.sub(r'^[•\-◆▶]\s*', '', line.strip())
-            chunks.append(f'<li style="margin-bottom: 10px; color: #475569; font-size: 15px; line-height: 1.6; text-align: left; margin-left: 30px;">{list_text}</li>')
+            chunks.append(f'<li style="margin-bottom: 10px; color: #475569; font-size: 17px; line-height: 1.6; text-align: left; margin-left: 30px;">{list_text}</li>')
             continue
         
         if line.startswith('|'):
@@ -274,7 +275,7 @@ def format_content(text):
             chunks.append('</ul>')
             in_list = False
         
-        chunks.append(f'<p style="text-align: center; font-size: 15px; line-height: 1.9; margin-bottom: 16px; color: #334155;">{line.strip()}</p>')
+        chunks.append(f'<p style="text-align: center; font-size: 17px; line-height: 1.9; margin-bottom: 16px; color: #334155;">{line.strip()}</p>')
     
     if in_list:
         chunks.append('</ul>')
@@ -289,8 +290,8 @@ def generate_adsense_html():
 def build_toc_html():
     return '''
 <div style="max-width: 500px; margin: 30px auto; background:#fff5f5; border:1px solid #fecaca; border-radius:12px; padding:20px 24px; text-align:left;">
-    <p style="font-weight:700; font-size:15px; color:#1e293b; margin:0 0 12px 0; text-align:center;">📋 목차</p>
-    <ul style="margin:0; padding-left:20px; font-size:14px; color:#334155; line-height:2;">
+    <p style="font-weight:700; font-size:16px; color:#1e293b; margin:0 0 12px 0; text-align:center;">📋 목차</p>
+    <ul style="margin:0; padding-left:20px; font-size:16px; color:#334155; line-height:2;">
         <li><a href="#spec" style="color:#E52528; text-decoration:none;">주요 스펙</a></li>
         <li><a href="#proscons" style="color:#E52528; text-decoration:none;">장점과 단점</a></li>
         <li><a href="#verdict" style="color:#E52528; text-decoration:none;">추천 대상</a></li>
@@ -305,8 +306,8 @@ def make_section_summary(text):
     if not text or not text.strip(): return ""
     return f'''
 <div style="max-width: 500px; margin: 20px auto 10px auto; background:#fff5f5; border:1px solid #fecaca; border-radius:10px; padding:14px 20px; text-align:left;">
-    <p style="margin:0; font-size:14px; color:#E52528; font-weight:700;">✅ 요약</p>
-    <p style="margin:6px 0 0 0; font-size:14px; color:#334155; line-height:1.6;">{text}</p>
+    <p style="margin:0; font-size:15px; color:#E52528; font-weight:700;">✅ 요약</p>
+    <p style="margin:6px 0 0 0; font-size:16px; color:#334155; line-height:1.6;">{text}</p>
 </div>
 '''
 
@@ -320,19 +321,19 @@ def build_faq_html(faq_list):
         if not q or not a: continue
         items += f'''
         <div style="margin-bottom:20px; text-align:left;">
-            <p style="font-weight:700; font-size:15px; color:#1e293b; margin:0 0 6px 0;">Q. {q}</p>
-            <p style="font-size:14px; color:#475569; line-height:1.7; margin:0;">A. {a}</p>
+            <p style="font-weight:700; font-size:17px; color:#1e293b; margin:0 0 6px 0;">Q. {q}</p>
+            <p style="font-size:16px; color:#475569; line-height:1.7; margin:0;">A. {a}</p>
         </div>'''
     if not items: return ""
     return f'''
-<h3 id="faq" style="font-size: 19px; font-weight: bold; color: #1e293b; margin: 48px 0 24px 0; display: inline-block; border-bottom: 3px solid #E52528; padding-bottom: 8px;">❓ 자주 묻는 질문</h3>
+<h3 id="faq" style="font-size: 21px; font-weight: bold; color: #1e293b; margin: 48px 0 24px 0; display: inline-block; border-bottom: 3px solid #E52528; padding-bottom: 8px;">❓ 자주 묻는 질문</h3>
 <div style="max-width:600px; margin:20px auto 0 auto;">{items}</div>
 '''
 
 # [신규] 결론 섹션
 def build_conclusion_html(conclusion_text):
     if not conclusion_text or not conclusion_text.strip(): return ""
-    return f'<h3 id="conclusion" style="font-size: 19px; font-weight: bold; color: #1e293b; margin: 48px 0 24px 0; display: inline-block; border-bottom: 3px solid #E52528; padding-bottom: 8px;">🏁 결론</h3>{format_content(conclusion_text)}'
+    return f'<h3 id="conclusion" style="font-size: 21px; font-weight: bold; color: #1e293b; margin: 48px 0 24px 0; display: inline-block; border-bottom: 3px solid #E52528; padding-bottom: 8px;">🏁 결론</h3>{format_content(conclusion_text)}'
 
 def validate_ai_data(ai_data):
     """AI 응답 검증"""
@@ -500,10 +501,10 @@ def main():
 
     cta_btn = f'<div style="margin: 40px 0; text-align: center;"><a href="{link_url}" target="_blank" style="background-color: #E52528; color: #FFFFFF; font-size: 17px; font-weight: bold; padding: 18px 36px; text-decoration: none; border-radius: 10px; display: inline-block; box-shadow: 0 6px 16px rgba(229, 37, 40, 0.3);">🚀 쿠팡에서 최저가 확인하기</a></div>'
     
-    hero_html = f'<div style="margin: 40px 0; text-align: center;"><a href="{link_url}" target="_blank"><img src="{best_img_url}" alt="{title}" style="max-width: 90%; border-radius: 16px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);"/></a><p style="font-size: 12px; color: #94a3b8; margin-top: 12px;">👆 이미지를 클릭하면 쿠팡 페이지로 이동합니다</p></div>'
+    hero_html = f'<div style="margin: 40px 0; text-align: center;"><a href="{link_url}" target="_blank"><img src="{best_img_url}" alt="{title}" style="max-width: 90%; border-radius: 16px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);"/></a><p style="font-size: 13px; color: #94a3b8; margin-top: 12px;">👆 이미지를 클릭하면 쿠팡 페이지로 이동합니다</p></div>'
 
-    ftc_msg = "<p style='color: #94a3b8; font-size: 12px; margin-bottom: 32px;'>💡 이 포스팅은 쿠팡 파트너스 활동으로 일정 수수료를 제공받습니다.</p>"
-    h3_style = 'font-size: 19px; font-weight: bold; color: #1e293b; margin: 48px 0 24px 0; display: inline-block; border-bottom: 3px solid #E52528; padding-bottom: 8px;'
+    ftc_msg = "<p style='color: #94a3b8; font-size: 13px; margin-bottom: 32px;'>💡 이 포스팅은 쿠팡 파트너스 활동으로 일정 수수료를 제공받습니다.</p>"
+    h3_style = 'font-size: 21px; font-weight: bold; color: #1e293b; margin: 48px 0 24px 0; display: inline-block; border-bottom: 3px solid #E52528; padding-bottom: 8px;'
 
     toc_html = build_toc_html()
     faq_html = build_faq_html(ai_data.get('faq', []))
