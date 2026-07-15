@@ -1,14 +1,12 @@
 name: Coupang Auto Blogger CI
-
 # ★★★ 이미지 업로드(GitHub 쓰기) 권한 - 이거 없으면 이미지 안 나옴! ★★★
 permissions:
   contents: write
-
 on:
   workflow_dispatch: # 👈 수동 실행 버튼 유지
   schedule:
-    # 💡 UTC 기준 1시, 5시, 9시 = 한국 시간(KST) 오전 10시, 오후 2시, 오후 6시
-    - cron: '0 1,5,9 * * *'
+    # 💡 UTC 기준 1시 = 한국 시간(KST) 오전 10시 / 매주 월(1), 수(3), 금(5)만 실행
+    - cron: '0 1 * * 1,3,5'
 jobs:
   build:
     runs-on: ubuntu-latest
