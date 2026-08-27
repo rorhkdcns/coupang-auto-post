@@ -69,6 +69,7 @@ def get_coupang_v2_products(access_key, secret_key):
 
     headers = {"Content-Type": "application/json", "Authorization": authorization_header}
     try:
+        time.sleep(4)
         res = requests.post(f"{domain}{path}", headers=headers, json=req_data, timeout=10)
         if res.status_code != 200: return []
         res_json = res.json()
